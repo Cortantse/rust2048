@@ -1,58 +1,12 @@
+use rand::{random, Rng};
+
+
+
 pub struct GameBoard {
     tiles: Vec<Vec<u32>>, // 用二维向量表示棋盘
     history: Vec<Vec<Vec<u32>>>, // 存储历史棋盘状态
-}
-
-impl GameBoard {
-    pub fn new() -> Self {
-        Self {
-            tiles: vec![vec![0; 4]; 4], // 默认为4x4的棋盘
-            history: Vec::new(), // 初始化空的历史记录
-        }
-    }
-
-    pub fn spawn_tile(&mut self) {
-        // 在棋盘上随机位置生成新的数字块
-
-        //!!!警告，这个函数最后写，因为先要测试移动功能，而移动功能答案是固定的，而spawn_tile会产生波动！！！！！！！！！！！！！！！！！！！！！！！！！！
-    }
-
-    pub fn move_tiles(&mut self, direction: Direction) {
-        // 根据用户输入的方向移动和合并数字块
-    }
-
-    pub fn check_game_over(&self) -> bool {
-        // 检查游戏是否结束
-        false
-    }
-
-    pub fn reset_board(&mut self) {
-        // 重置棋盘到初始状态
-    }
-
-    pub fn return_score(&self) -> u32 {
-        // 返回当前分数
-        0
-    }
-    // 添加一个新的函数用于保存当前棋盘到历史记录
-    pub fn save_current_state(&mut self) {
-        // 将当前棋盘状态复制并添加到历史记录中
-    }
-
-    // 添加一个新的函数用于撤销上一步操作
-    pub fn undo_move(&mut self) {
-        // 恢复到上一步的棋盘状态
-    }
-
-    fn print_state(&mut self){
-        // 打印棋盘，方便做调试
-        for i in 0..4{
-            for j in 0..4{
-                print!("{} ",self.tiles[i][j]);
-            }
-            println!("");
-        }
-    }
+    check_should_be_used_after_spawn: bool,
+    reach_2048: bool,
 }
 
 pub enum Direction {
@@ -60,7 +14,297 @@ pub enum Direction {
     Down,
     Left,
     Right,
+    None,
 }
+
+
+impl GameBoard {
+    pub fn new() -> Self {
+        Self {
+            tiles: vec![vec![0; 4]; 4], // 默认为4x4的棋盘
+            history: Vec::new(), // 初始化空的历史记录
+            check_should_be_used_after_spawn: false,
+            reach_2048: false,
+        }
+    }
+
+    pub fn spawn_tile(&mut self) {
+        self.check_should_be_used_after_spawn = true;
+        // 先检查是否还有空位
+        if !self.if_have_empty_tile() {
+            return;
+        }
+
+
+        // 在棋盘上随机位置生成新的数字块
+        // 10%概率生成4 90%概率生成2
+        let mut rng = rand::thread_rng();
+        let mut num = rng.gen_range(0..9); // 生成一个0到9之间的随机整数
+        match num {
+            0 => num = 4,
+            _ => num = 2,
+        }
+        let mut empty_space = vec![];
+        for i in 0..4 {
+            for j in 0..4 {
+                if self.tiles[i][j] == 0 {
+                    empty_space.push((i, j));
+                }
+            }
+        }
+        let random_choice = rng.gen_range(0..empty_space.len());
+        let (i, j) = empty_space[random_choice];
+        self.tiles[i][j] = num;
+
+        //警告，这个函数最后写，因为先要测试移动功能，而移动功能答案是固定的，而spawn_tile会产生波动！！！！！！！！！！！！！！！！！！！！！！！！！！
+        //只有spawn_tile后才能运行check_game_over
+        self.check_should_be_used_after_spawn = true;
+    }
+
+    pub fn move_tiles(&mut self, direction: Direction) {
+        // 根据用户输入的方向移动和合并数字块
+        self.save_current_state();
+        let last_score = self.return_score();
+        match direction {
+            Direction::Up => self.move_up(),
+            Direction::Down => self.move_down(),
+            Direction::Left => self.move_left(),
+            Direction::Right => self.move_right(),
+            Direction::None => panic!("Should not go to move_tiles function with None direction"),
+        }
+        // 内置检查，理论上移动前后不会有数据差别
+        let score = self.return_score();
+        if last_score.0 != score.0 {
+            print!("Score {:?} is not equal to {:?}", last_score, score);
+            panic!();
+        }
+        // 放置新tile
+        // self.spawn_tile();
+
+        // 检查游戏是否结束
+        // if self.check_game_over() {
+        //     println!("Game over!");
+        //     std::process::exit(0);
+        // }
+
+    }
+    
+    pub fn return_if_win(&self) -> bool {
+        self.reach_2048
+    }
+
+    pub fn check_game_over(&mut self) -> bool {
+        // 检查游戏是否结束，这个函数应该只在spawn后被使用
+        // 机制很简单，首先分为成功结束和失败结束：
+        // 1、先检查是否由空区域，若有则还没结束 2、若没有，移动四个方向看看为不为空，若还没有也结束 —— 失败结束
+        // 1、若最大值2048及以上，则结束，并且设置reach_2048为真 —— 成功结束
+        if !self.check_should_be_used_after_spawn {
+            print!("funcction check_game_over should be used after spawning");
+            panic!();
+        }
+        self.check_should_be_used_after_spawn = false;
+        // 获取最大值
+        let (_, max) = self.return_score();
+        if max >= 2048 {
+            self.reach_2048 = true;
+            return true;
+        }
+        // 检查四个方向是否有空位置
+        // 若有，则还没结束
+        // 若没有，则结束
+        
+        if !self.if_have_empty_tile(){
+            // 没有位置了
+
+            self.save_current_state();// 便于还原
+            self.move_down();
+            if self.if_have_empty_tile(){
+                self.undo_move();
+                return false;
+            }
+            self.undo_move();
+            
+            self.save_current_state();// 便于还原
+            self.move_left();
+            if self.if_have_empty_tile(){
+                self.undo_move();
+                return false;
+            }
+            self.undo_move();
+            
+            self.save_current_state();
+            self.move_up();
+            if self.if_have_empty_tile(){
+                self.undo_move();
+                return false;
+            }
+            self.undo_move();
+            
+            self.save_current_state();
+            self.move_right();
+            if self.if_have_empty_tile(){
+                self.undo_move();
+                return false;
+            }
+            self.undo_move();
+
+            return true;
+        }
+
+
+        false
+    }
+
+    pub fn reset_board(&mut self) {
+        // 重置棋盘到初始状态
+        self.tiles = vec![vec![0; 4]; 4];
+        self.history = Vec::new(); // 清空历史记录
+    }
+
+    pub fn return_score(&self) -> (u32, u32) {
+        // 返回 总分数和最大分数
+        let mut max = 0;
+        let mut score = 0;
+        for i in 0..4 {
+            for j in 0..4 {
+                score += self.tiles[i][j];
+                if self.tiles[i][j] > max {
+                    max = self.tiles[i][j];
+                }
+            }
+        }
+        (score, max)
+    }
+    // 添加一个新的函数用于保存当前棋盘到历史记录
+    pub fn save_current_state(&mut self) {
+        // 将当前棋盘状态复制并添加到历史记录中
+        // vec是堆空间，由vec管理，内存安全
+        let current_board = self.tiles.clone();
+        self.history.push(current_board);
+    }
+
+    // 添加一个新的函数用于撤销上一步操作
+    pub fn undo_move(&mut self) {
+        // 恢复到上一步的棋盘状态
+        if self.history.len() > 0 {
+            // 默认考虑直接pop出，方便多次还原
+            self.tiles = self.history.pop().unwrap();
+        }
+        else {
+            // no tiles
+            println!("no tiles");
+        }
+    }
+
+    pub fn print_state(&mut self){
+        // 打印棋盘，方便做调试
+        println!("====================");//换个行
+        for i in 0..4{
+            for j in 0..4{
+                print!("{} ",self.tiles[i][j]);
+            }
+            println!("");
+        }
+        println!("====================");//换个行
+    }
+    pub fn move_abstract(&mut self, mut line: Vec<u32>) -> Vec<u32> {
+        // 返回一个向左的合并数组
+        let mut new_line = vec![];
+        let len_of_line = line.len();
+        for i in 0..len_of_line {
+            if line[i] != 0 {
+                // 如果为0那么不管了
+                // 进行合并
+                let mut if_find = false;
+                for j in i + 1..len_of_line {
+                    if line[j] == line[i] {
+                        // 相等，清空
+                        new_line.push(line[i] * 2);
+                        line[i] = 0;
+                        line[j] = 0;
+                        if_find = true;
+                        break;
+                    }
+                    if line[j] != 0 {
+                        // 匹配失败且中间格非空，则失败
+                        break;
+                    }
+                }
+                // 判断是否合并成功
+                if !if_find {
+                    new_line.push(line[i]);
+                }
+
+            }
+        }
+        // 填充0
+        let fill_zero_size = len_of_line - new_line.len();
+        for i in 0..fill_zero_size {
+            new_line.push(0);
+        }
+        new_line
+    }
+    fn move_left(&mut self){
+        for i in 0..4 {
+            self.tiles[i] = self.move_abstract(self.tiles[i].clone());
+        }
+    }
+    fn move_right(&mut self){
+        for i in 0..4 {
+            // 需要反向使用abstract
+            let mut line = vec![];
+            for j in (0..4).rev() {
+                line.push(self.tiles[i][j]);
+            }
+            line = self.move_abstract(line);
+            for j in (0..4).rev() {
+                self.tiles[i][j] = line[4 - 1 - j];
+            }
+            // 2 2 2 0
+            // 0 0 2 4
+            // using abstract method
+            // 0 2 2 2
+            // 4 2 0 0
+        }
+    }
+    fn move_up(&mut self){
+        for i in 0..4 {
+            // 需要反向使用abstract
+            let mut line = vec![];
+            for j in (0..4) {
+                line.push(self.tiles[j][i]);
+            }
+            line = self.move_abstract(line);
+            for j in (0..4) {
+                self.tiles[j][i] = line[j];
+            }
+        }
+    }
+    fn move_down(&mut self){
+        for i in (0..4) {
+            // 需要反向使用abstract
+            let mut line = vec![];
+            for j in (0..4).rev() {
+                line.push(self.tiles[j][i]);
+            }
+            line = self.move_abstract(line);
+            for j in (0..4).rev() {
+                self.tiles[j][i] = line[4 - 1 - j];
+            }
+        }
+    }
+    fn if_have_empty_tile(&mut self) -> bool {
+        for i in (0..4) {
+            for j in (0..4) {
+                if self.tiles[i][j] == 0 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
 
 
 
@@ -70,8 +314,6 @@ pub enum Direction {
 #[cfg(test)]
 mod tests_base {
     use super::*;
-
-
     #[test]
     fn test_reset_board() {
         let mut game = GameBoard::new();
@@ -100,15 +342,34 @@ mod tests_base {
             vec![0, 0, 0, 0],
         ];
         let points = game.return_score();
-        assert_eq!(points, 510, "计算分数失败");
+        assert_eq!(points.0, 510, "计算分数失败");
     }
 
 
     #[test]
     fn test_check_game_over() {
         // 设计什么时候棋盘算失败
-        // 棋盘满时就失败吗？
-        // 还是满了并且四个方向移动都无法合并产生新的空间的时候算失败？
+        // 棋盘满时就失败吗？应该不对
+        // 个人感觉应该是棋盘满了，并且四个方向移动都无法生成空白空间才算失败
+        let mut game = GameBoard::new();
+        game.tiles = vec![
+            vec![2, 4, 8, 16],
+            vec![32, 64, 128, 256],
+            vec![2, 4, 8, 16],
+            vec![32, 64, 128, 256],
+        ];
+        game.spawn_tile();
+        print!("{:?}", game.check_game_over());
+    }
+
+    #[test]
+    fn test_move_abstract() {
+        let line_ori = vec![2, 4, 4, 2];
+        let line_new = vec![2, 8, 2, 0];
+        let mut game = GameBoard::new();
+        let new_line = game.move_abstract(line_ori);
+        assert_eq!(new_line, line_new, "合并失败，实际{:?}, 期望{:?}", new_line, line_new);
+
     }
 }
 
@@ -119,6 +380,8 @@ mod tests_base {
 // 注意，使用该单元测试时，请关闭 检测棋盘功能/生成tile函数 否则无法正常进行
 #[cfg(test)]
 mod tests_move {
+    use super::*;
+
     #[test]
     fn test_move_tiles_complicated_right() {
         let mut game = GameBoard::new();
@@ -189,8 +452,8 @@ mod tests_move {
         let expected = vec![
             vec![0, 0, 0, 0],
             vec![0, 0, 0, 0],
-            vec![4, 8, 0, 4],
-            vec![8, 2, 8, 2],
+            vec![4, 8, 0, 2],
+            vec![8, 2, 8, 4],
         ];
         assert_eq!(game.tiles, expected, "向下合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
     }
@@ -225,7 +488,7 @@ mod tests_move {
             vec![2, 2, 2, 2],
             vec![2, 2, 2, 2],
         ];
-        game.move_tiles(Direction::Down);
+        game.move_tiles(Direction::Right);
         let expected = vec![
             vec![0, 0, 4, 4],
             vec![0, 0, 4, 4],
