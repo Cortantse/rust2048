@@ -9,7 +9,8 @@ pub struct GameBoard {
     reach_2048: bool,
 }
 
-pub enum Direction {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Direction{
     Up,
     Down,
     Left,
@@ -92,6 +93,15 @@ impl GameBoard {
     pub fn return_if_win(&self) -> bool {
         self.reach_2048
     }
+
+    pub fn get_tiles(&self) -> &Vec<Vec<u32>> {
+        &self.tiles
+    }
+
+    pub fn get_tiles_mut(&mut self) -> &mut Vec<Vec<u32>> {
+        &mut self.tiles
+    }
+
 
     pub fn check_game_over(&mut self) -> bool {
         // 检查游戏是否结束，这个函数应该只在spawn后被使用
@@ -207,6 +217,42 @@ impl GameBoard {
         }
         println!("====================");//换个行
     }
+
+    pub fn print_state_with(&mut self, other: &GameBoard, animated_vector : Option<Vec<u32>>){
+        // 打印棋盘，方便做调试
+        println!("====================");//换个行
+        for i in 0..4{
+            for j in 0..4{
+                print!("{} ",self.tiles[i][j]);
+            }
+            let j = 0;
+            if i == 1 || i == 3 {
+                print!("---------- {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
+            }
+            else if i == 2 {
+                if let Some(ref print_vector) = animated_vector  {
+                    let space_occupied = print_vector.len() * 2;
+                    for item in print_vector {
+                        print!("{} ", item);
+                    }
+                    for i in 0..10 - space_occupied {
+                        print!(" ");
+                    }
+                    print!(" {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
+                }
+                else {
+                    print!("           {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
+                }
+            }
+            else {
+                print!("           {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
+            }
+            println!("");
+        }
+        println!("====================");//换个行
+    }
+
+
     pub fn move_abstract(&mut self, mut line: Vec<u32>) -> Vec<u32> {
         // 返回一个向左的合并数组
         let mut new_line = vec![];
