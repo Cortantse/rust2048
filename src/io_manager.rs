@@ -33,14 +33,14 @@ impl IOManager {
                 if key_event.kind == KeyEventKind::Press {
                     self.update_last_input_time(); // Update the last input time
                     return Some(match key_event.code {
-                        KeyCode::Up =>{ println!("left board chossing ↑");(Direction::Up, 0)},
-                        KeyCode::Left =>{println!("left board choosing ←");(Direction::Left, 0)},
-                        KeyCode::Down =>{println!("left board choosing ↓");(Direction::Down, 0)},
-                        KeyCode::Right => {println!("left board choosing →");(Direction::Right, 0)},
-                        KeyCode::Char('w') => {println!("right board choosing ↑");(Direction::Up, 1)},
-                        KeyCode::Char('a') => {println!("right board choosing ←");(Direction::Left, 1)},
-                        KeyCode::Char('s') => {println!("right board choosing ↓");(Direction::Down, 1)},
-                        KeyCode::Char('d') => {println!("right board choosing →");(Direction::Right, 1)},
+                        KeyCode::Up =>{ println!("right board chossing ↑");(Direction::Up, 1)},
+                        KeyCode::Left =>{println!("right board choosing ←");(Direction::Left, 1)},
+                        KeyCode::Down =>{println!("right board choosing ↓");(Direction::Down, 1)},
+                        KeyCode::Right => {println!("right board choosing →");(Direction::Right, 1)},
+                        KeyCode::Char('w') => {println!("left board choosing ↑");(Direction::Up, 0)},
+                        KeyCode::Char('a') => {println!("left board choosing ←");(Direction::Left, 0)},
+                        KeyCode::Char('s') => {println!("left board choosing ↓");(Direction::Down, 0)},
+                        KeyCode::Char('d') => {println!("left board choosing →");(Direction::Right, 0)},
                         _ => (Direction::None, -1),
                     });
                 }

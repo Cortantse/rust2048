@@ -39,7 +39,12 @@ fn main(){
                 (_, 0) => {
                     // 非None 才管
                     // io_manager.clear_screen();
-                    let animated_vector = bridge.send_through_bridge(other_board, &mut game_board, action);
+                    // 补丁：如果左棋盘向左那么不会有这个问题
+                    let animated_vector = None;
+                    if action != Direction::Left {
+                        let animated_vector = bridge.send_through_bridge(other_board, &mut game_board, action);
+                    }
+
                     game_board.move_tiles(action);
                     game_board.spawn_tile();
                     game_board.print_state_with(other_board, animated_vector);
@@ -57,7 +62,11 @@ fn main(){
                 _ => {
                     // 非None 才管
                     // io_manager.clear_screen();
-                    let animated_vector = bridge.send_through_bridge(&mut game_board, other_board, action);
+                    // 补丁：如果右棋盘向右则忽略这个函数
+                    let animated_vector = None;
+                    if action != Direction::Right {
+                        let animated_vector = bridge.send_through_bridge(&mut game_board, other_board, action);
+                    }
                     other_board.move_tiles(action);
                     other_board.spawn_tile();
                     game_board.print_state_with(other_board, animated_vector);
