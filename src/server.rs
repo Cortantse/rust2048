@@ -5,14 +5,15 @@ use tokio::sync::mpsc;
 use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration};
 
+
+mod config;
+
 #[tokio::main]
 async fn main() {
-    // 設定線程池大小
-    let max_connections = 10;
-    let semaphore = Arc::new(Semaphore::new(max_connections));
+    let semaphore = Arc::new(Semaphore::new(config::SERVER_CAPACITY));
 
-    let listener = TcpListener::bind("192.168.226.185:8080").await.unwrap();
-    println!("Server is running on 127.0.0.1:8080");
+    let listener = TcpListener::bind("0.0.0.0:" + config::SERVER_PORT).await.unwrap();
+    println!("Server is running on " + config::SERVER_IP + ":" + config::SERVER_PORT);
 
     // 使用mpsc通道來管理連接
     let (tx, mut rx) = mpsc::channel::<(tokio::net::TcpStream, tokio::net::TcpStream)>(100);
