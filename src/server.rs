@@ -1,81 +1,276 @@
+use bincode;
+use protocol::{GameState, Message, PlayerIdentity};
+use tokio::time::sleep;
+use std::ops::ControlFlow;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
-use tokio::sync::Semaphore;
-use tokio::time::{sleep, Duration};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{mpsc, Mutex, Semaphore};
 
-
+mod bridge;
 mod config;
+mod game_board;
+mod game_controller;
+mod io_manager;
+mod protocol;
 
+use game_board::Direction;
+use protocol::{deserialize_message, serialize_message};
+
+pub use crate::bridge::Bridge;
+pub use crate::game_board::GameBoard;
+pub use crate::game_controller::GameController;
+pub use crate::io_manager::IOManager;
+
+// 服务器函数采用 1+1+k体系
+// 1 为主任务循环，负责快速匹配，此处流量最大，只负责匹配，匹配后迅速通过管道发送到第一层异步任务
+// 1 为第一层异步任务，负责生成新的异步任务给 每匹配的两个客户端
+// k 个异步任务，负责双方的通信
+
+// 初始化双方状态：
+async fn initiate_two_clients_status(
+    socket1: &mut TcpStream,
+    socket2: &mut TcpStream,
+    game_board1: Arc<Mutex<GameBoard>>,
+    game_board2: Arc<Mutex<GameBoard>>,
+    bridge: Arc<Mutex<Bridge>>,
+) {
+    println!("into initiate_two_clients_status");
+    // 创建两个新的游戏板，每个游戏板对应一个客户端
+
+    // 初始化游戏板，随机放置一个瓷砖
+    {
+        let mut gb = game_board1.lock().await;
+        gb.spawn_tile();
+        println!("Game board after spawning tile: {:?}", gb.get_tiles());
+    }
+    {
+        let mut ob = game_board2.lock().await;
+        ob.spawn_tile();
+        println!("Other board after spawning tile: {:?}", ob.get_tiles());
+    }
+
+    println!("now trying to send identity message to client");
+
+    // 在发送棋盘数据前，先告诉玩家身份
+    let mut player_identity = PlayerIdentity { player_number: 1 };
+    // 这里unrap异常，给了err
+    let serialized_identity = serialize_message(&Message::PlayerIdentity(player_identity)).unwrap();
+    // 将第一个等待者作为玩家1
+    socket1
+        .write_all(serialized_identity.as_bytes())
+        .await
+        .unwrap();
+
+    player_identity = PlayerIdentity { player_number: 2 };
+    let serialized_identity = serialize_message(&Message::PlayerIdentity(player_identity)).unwrap();
+    socket2
+        .write_all(serialized_identity.as_bytes())
+        .await
+        .unwrap();
+
+    println!("successfully sending identity message to clients");
+    println!("now trying to send initial board status message to clients");
+
+
+    send_board_status(game_board1, game_board2, socket1, socket2).await;
+    println!()
+}
+
+
+// 发送棋盘当前状态给双方
+async fn send_board_status(game_board1: Arc<Mutex<GameBoard>>, game_board2: Arc<Mutex<GameBoard>>, socket1: &mut TcpStream, socket2: &mut TcpStream) {
+    println!("Into sending board_status");
+    // 序列化双方棋盘状态，传递给客户端，使用定制协议
+
+    // 尝试获取锁，小心一点
+    let mut game_board1_unlocked = game_board1.lock().await;
+    let mut game_board2_unlocked = game_board2.lock().await;
+    let game_state = GameState {
+        board1: game_board1_unlocked.get_tiles().to_vec(),
+        board2: game_board2_unlocked.get_tiles().to_vec(),
+        board1_reach_2048: game_board1_unlocked.check_game_over(),
+        board2_reach_2048: game_board2_unlocked.check_game_over(),
+    };
+
+    println!("already get the lock");
+    // 协议初始化
+    let message = Message::GameState(game_state);
+    let serialized_message = serialize_message(&message).unwrap();
+
+    
+
+    // 将游戏板状态发送给两个客户端
+    socket1
+        .write_all(serialized_message.as_bytes())
+        .await
+        .unwrap();
+    socket2
+        .write_all(serialized_message.as_bytes())
+        .await
+        .unwrap();
+
+    println!("successfully sent message about board status");
+}
+
+// k 个异步任务的定义：
+async fn deal_with_two_clients(
+    mut socket1: TcpStream,
+    mut socket2: TcpStream,
+    game_board1: Arc<Mutex<GameBoard>>,
+    game_board2: Arc<Mutex<GameBoard>>,
+    bridge: Arc<Mutex<Bridge>>,
+) {
+    loop {
+        let mut buffer1 = vec![0; 1024];
+        let mut buffer2 = vec![0; 1024];
+
+        println!("waiting for client 1 to act first");
+
+        // 先让客户端1执行动作
+        if let ControlFlow::Break(_) = execute_action_and_update_to_clients(&mut socket1, &mut socket2, game_board1.clone(), game_board2.clone(), bridge.clone(), false).await {
+            break;
+        }
+
+        println!("waiting for client 2 to act first");
+
+        // 再让客户端2执行动作
+        if let ControlFlow::Break(_) = execute_action_and_update_to_clients(&mut socket2, &mut socket1, game_board2.clone(), game_board1.clone(), bridge.clone(), true).await {
+            break;
+        }
+
+    }
+}
+
+//用于处理客户端发送action的函数
+async fn execute_action_and_update_to_clients(socket1: &mut TcpStream, socket2: &mut TcpStream, game_board1: Arc<Mutex<GameBoard>>, game_board2: Arc<Mutex<GameBoard>>, bridge: Arc<Mutex<Bridge>>, if_player2: bool) -> ControlFlow<()> {
+    let mut buffer1 = vec![0; 1024];
+    match socket1.read(&mut buffer1).await {
+        Ok(0) => {
+            // 如果客户端1断开连接，尝试优雅关闭客户端2的连接
+            let _ = socket2.shutdown().await;
+            return ControlFlow::Break(()); // 退出循环，结束任务
+        }
+        Ok(n) => {
+            // 尝试从接收的数据解析出玩家操作
+            match deserialize_message(&String::from_utf8_lossy(&buffer1[..n])) {
+                Ok(Message::PlayerAction(action)) => {
+                    // 成功解析出玩家动作，处理游戏逻辑
+                    {
+                        //小心翼翼获取锁
+                        let mut gb = game_board1.lock().await; // 锁定并获取第一个游戏板
+                        let mut ob = game_board2.lock().await; // 锁定并获取第二个游戏板
+                        let mut br = bridge.lock().await; // 锁定并获取桥接器对象
+                        br.send_through_bridge(&mut ob, &mut gb, action.direction); // 使用桥接器传递动作
+                        gb.move_tiles(action.direction); // 移动第一个游戏板上的瓷砖
+                        gb.spawn_tile(); // 在第一个游戏板上生成新的瓷砖
+                        gb.print_state_with(&ob, None); // 打印当前游戏状态
+
+                    }
+
+                    // 更新双方情况，接受一个参数来判断是谁
+                    if !if_player2 {
+                        send_board_status(game_board1.clone(), game_board2.clone(), socket1, socket2).await;
+                    }
+                    else {
+                        // 反转，保持gameboard1还是player1，方便客户端区分
+                        send_board_status(game_board2.clone(), game_board1.clone(), socket2, socket1).await;
+                    }
+                }
+                Ok(_) => eprintln!("Unexpected message type"), // 接收到非预期类型的消息
+                Err(e) => eprintln!("Failed to parse client 1 input: {}", e), // 解析消息失败
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to read from socket: {}", e); // 从套接字读取失败
+            return ControlFlow::Break(()); // 出错时退出循环
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+
+// 主函数
 #[tokio::main]
 async fn main() {
+    // 创建一个信号量来保证并发数不超过 SERVER_CAPACITY
     let semaphore = Arc::new(Semaphore::new(config::SERVER_CAPACITY));
 
-    let listener = TcpListener::bind("0.0.0.0:" + config::SERVER_PORT).await.unwrap();
-    println!("Server is running on " + config::SERVER_IP + ":" + config::SERVER_PORT);
+    let listener = TcpListener::bind("0.0.0.0:".to_owned() + config::SERVER_PORT)
+        .await
+        .unwrap();
+    let mess = "Server is running on ".to_owned() + config::SERVER_IP + ":" + config::SERVER_PORT;
+    println!("{}", mess);
 
-    // 使用mpsc通道來管理連接
-    let (tx, mut rx) = mpsc::channel::<(tokio::net::TcpStream, tokio::net::TcpStream)>(100);
+    // 创造一个管道，用于传送匹配好的两个人
+    let (tx, mut rx) = mpsc::channel::<(TcpStream, TcpStream)>(100);
 
-    // 任務處理客戶端連接
+    // 创造异步任务，专门用于处理一对客户端的通信
     tokio::spawn(async move {
         while let Some((mut socket1, mut socket2)) = rx.recv().await {
+            // 从管道处获得了一组匹配的客户端，现在对它们进行初始化，然后交给异步任务处理
+
+            // 创建线程安全的gameboard和bridge
+            let game_board = Arc::new(Mutex::new(GameBoard::new()));
+            let other_board = Arc::new(Mutex::new(GameBoard::new()));
+            // 生成桥梁，此处后面的逻辑要改，因为桥梁参数应该是服务器动态随机的过程，但是为了简便，暂时桥梁固定
+            let bridge: Arc<Mutex<Bridge>> = Arc::new(Mutex::new(Bridge::new(
+                true,
+                Direction::Left,
+                true,
+                2,
+                2,
+                999999,
+            )));
+
+            // sleep(Duration::from_secs(10)).await; // 控制循环速度
+
+            // 初始化双方状态
+            initiate_two_clients_status(
+                &mut socket1,
+                &mut socket2,
+                game_board.clone(),
+                other_board.clone(),
+                bridge.clone(),
+            ).await;
+
+            println!("finished initiate_two_clients_status");
+            // sleep(Duration::from_secs(10)).await; // 控制循环速度
+            
+
+            // 创建一个新的任务用于双方客户端的通信，本地任务继续等待主循环匹配并传递新任务
             tokio::spawn(async move {
-                let mut buffer1 = [0; 1024];
-                let mut buffer2 = [0; 1024];
-
-                // 讀取並回應第一個客戶端
-                match socket1.read(&mut buffer1).await {
-                    Ok(0) => return, // 連接已經關閉
-                    Ok(_) => {
-                        // sleep(Duration::from_secs(1)).await;
-                        socket1
-                            .write_all(
-                                b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\nHello, Client 1!",
-                            )
-                            .await
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        println!("Failed to read from socket 1; err = {:?}", e);
-                    }
-                }
-
-                // 讀取並回應第二個客戶端
-                match socket2.read(&mut buffer2).await {
-                    Ok(0) => return, // 連接已經關閉
-                    Ok(_) => {
-                        sleep(Duration::from_secs(1)).await;
-                        socket2
-                            .write_all(
-                                b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\nHello, Client 2!",
-                            )
-                            .await
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        println!("Failed to read from socket 2; err = {:?}", e);
-                    }
-                }
+                deal_with_two_clients(socket1, socket2, game_board, other_board, bridge).await;
             });
         }
     });
 
-    let mut pending_socket: Option<tokio::net::TcpStream> = None;
+    // 主循环用于侦听和捕获连接
+    let mut pending_socket: Option<TcpStream> = None;
+    // 这里的匹配逻辑好像有bug！！！！！！
 
     loop {
+        println!("Waiting for connections...");
+        // 接收新的TCP连接
         let (mut socket, _) = listener.accept().await.unwrap();
+        // 获取信号量的许可，用于控制同时处理的连接数，没有时会等待
         let permit = semaphore.clone().acquire_owned().await.unwrap();
 
-        if let Some(pending) = pending_socket.take() {
-            // 如果有待處理的socket，將它們配對並發送給處理線程
+        // 检查是否有待处理的socket
+        if let Some(mut pending) = pending_socket.take() {
+            // 如果有待处理的socket，说明现在有两个连接可以配对
+
+            // 将这对socket以及对应的游戏板发送到处理任务
+            // 主循环快速处理，主循环完成匹配后将多余内容留给异步线程
+            
             tx.send((pending, socket)).await.unwrap();
         } else {
-            // 如果沒有待處理的socket，則將當前socket設置為待處理
+            // 如果没有待处理的socket，将当前socket保存为待处理
             pending_socket = Some(socket);
         }
 
-        drop(permit); // 釋放線程池資源
+        // 释放信号量的许可，允许其他连接继续
+        drop(permit);
     }
 }

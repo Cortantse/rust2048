@@ -1,16 +1,8 @@
 use rand::{random, Rng};
+use serde::{Deserialize, Serialize};
 
-
-
-pub struct GameBoard {
-    tiles: Vec<Vec<u32>>, // 用二维向量表示棋盘
-    history: Vec<Vec<Vec<u32>>>, // 存储历史棋盘状态
-    check_should_be_used_after_spawn: bool,
-    reach_2048: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Direction{
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Direction {
     Up,
     Down,
     Left,
@@ -18,12 +10,18 @@ pub enum Direction{
     None,
 }
 
+pub struct GameBoard {
+    tiles: Vec<Vec<u32>>,        // 用二维向量表示棋盘
+    history: Vec<Vec<Vec<u32>>>, // 存储历史棋盘状态
+    check_should_be_used_after_spawn: bool,
+    reach_2048: bool,
+}
 
 impl GameBoard {
     pub fn new() -> Self {
         Self {
             tiles: vec![vec![0; 4]; 4], // 默认为4x4的棋盘
-            history: Vec::new(), // 初始化空的历史记录
+            history: Vec::new(),        // 初始化空的历史记录
             check_should_be_used_after_spawn: false,
             reach_2048: false,
         }
@@ -35,7 +33,6 @@ impl GameBoard {
         if !self.if_have_empty_tile() {
             return;
         }
-
 
         // 在棋盘上随机位置生成新的数字块
         // 10%概率生成4 90%概率生成2
@@ -87,9 +84,8 @@ impl GameBoard {
         //     println!("Game over!");
         //     std::process::exit(0);
         // }
-
     }
-    
+
     pub fn return_if_win(&self) -> bool {
         self.reach_2048
     }
@@ -102,7 +98,6 @@ impl GameBoard {
         &mut self.tiles
     }
 
-
     pub fn check_game_over(&mut self) -> bool {
         // 检查游戏是否结束，这个函数应该只在spawn后被使用
         // 机制很简单，首先分为成功结束和失败结束：
@@ -110,7 +105,6 @@ impl GameBoard {
         // 1、若最大值2048及以上，则结束，并且设置reach_2048为真 —— 成功结束
         if !self.check_should_be_used_after_spawn {
             print!("funcction check_game_over should be used after spawning");
-            panic!();
         }
         self.check_should_be_used_after_spawn = false;
         // 获取最大值
@@ -122,37 +116,37 @@ impl GameBoard {
         // 检查四个方向是否有空位置
         // 若有，则还没结束
         // 若没有，则结束
-        
-        if !self.if_have_empty_tile(){
+
+        if !self.if_have_empty_tile() {
             // 没有位置了
 
-            self.save_current_state();// 便于还原
+            self.save_current_state(); // 便于还原
             self.move_down();
-            if self.if_have_empty_tile(){
+            if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
             }
             self.undo_move();
-            
-            self.save_current_state();// 便于还原
+
+            self.save_current_state(); // 便于还原
             self.move_left();
-            if self.if_have_empty_tile(){
+            if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
             }
             self.undo_move();
-            
+
             self.save_current_state();
             self.move_up();
-            if self.if_have_empty_tile(){
+            if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
             }
             self.undo_move();
-            
+
             self.save_current_state();
             self.move_right();
-            if self.if_have_empty_tile(){
+            if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
             }
@@ -160,7 +154,6 @@ impl GameBoard {
 
             return true;
         }
-
 
         false
     }
@@ -199,38 +192,57 @@ impl GameBoard {
         if self.history.len() > 0 {
             // 默认考虑直接pop出，方便多次还原
             self.tiles = self.history.pop().unwrap();
-        }
-        else {
+        } else {
             // no tiles
             println!("no tiles");
         }
     }
 
-    pub fn print_state(&mut self){
-        // 打印棋盘，方便做调试
-        println!("====================");//换个行
-        for i in 0..4{
-            for j in 0..4{
-                print!("{} ",self.tiles[i][j]);
+    // pub fn print_state(&mut self) {
+    //     // 打印棋盘，方便做调试
+    //     println!("===================="); //换个行
+    //     for i in 0..4 {
+    //         for j in 0..4 {
+    //             print!("{} ", self.tiles[i][j]);
+    //         }
+    //         println!("");
+    //     }
+    //     println!("===================="); //换个行
+    // }
+
+    pub fn set_tiles(&mut self, tiles: Vec<Vec<u32>>) {
+        self.tiles = tiles;
+    }
+
+    pub fn print_state(&self) {
+        println!("===================="); // 换个行
+        for row in &self.tiles {
+            for &tile in row {
+                print!("{} ", tile);
             }
             println!("");
         }
-        println!("====================");//换个行
+        println!("===================="); // 换个行
     }
 
-    pub fn print_state_with(&mut self, other: &GameBoard, animated_vector : Option<Vec<u32>>){
+    pub fn print_state_with(&mut self, other: &GameBoard, animated_vector: Option<Vec<u32>>) {
         // 打印棋盘，方便做调试
-        println!("====================");//换个行
-        for i in 0..4{
-            for j in 0..4{
-                print!("{} ",self.tiles[i][j]);
+        println!("===================="); //换个行
+        for i in 0..4 {
+            for j in 0..4 {
+                print!("{} ", self.tiles[i][j]);
             }
             let j = 0;
             if i == 1 || i == 3 {
-                print!("---------- {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
-            }
-            else if i == 2 {
-                if let Some(ref print_vector) = animated_vector  {
+                print!(
+                    "---------- {} {} {} {}",
+                    other.tiles[i][j],
+                    other.tiles[i][j + 1],
+                    other.tiles[i][j + 2],
+                    other.tiles[i][j + 3]
+                );
+            } else if i == 2 {
+                if let Some(ref print_vector) = animated_vector {
                     let space_occupied = print_vector.len() * 2;
                     for item in print_vector {
                         print!("{} ", item);
@@ -238,20 +250,35 @@ impl GameBoard {
                     for i in 0..10 - space_occupied {
                         print!(" ");
                     }
-                    print!(" {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
+                    print!(
+                        " {} {} {} {}",
+                        other.tiles[i][j],
+                        other.tiles[i][j + 1],
+                        other.tiles[i][j + 2],
+                        other.tiles[i][j + 3]
+                    );
+                } else {
+                    print!(
+                        "           {} {} {} {}",
+                        other.tiles[i][j],
+                        other.tiles[i][j + 1],
+                        other.tiles[i][j + 2],
+                        other.tiles[i][j + 3]
+                    );
                 }
-                else {
-                    print!("           {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
-                }
-            }
-            else {
-                print!("           {} {} {} {}", other.tiles[i][j], other.tiles[i][j + 1], other.tiles[i][j + 2], other.tiles[i][j + 3]);
+            } else {
+                print!(
+                    "           {} {} {} {}",
+                    other.tiles[i][j],
+                    other.tiles[i][j + 1],
+                    other.tiles[i][j + 2],
+                    other.tiles[i][j + 3]
+                );
             }
             println!("");
         }
-        println!("====================");//换个行
+        println!("===================="); //换个行
     }
-
 
     pub fn move_abstract(&mut self, mut line: Vec<u32>) -> Vec<u32> {
         // 返回一个向左的合并数组
@@ -280,7 +307,6 @@ impl GameBoard {
                 if !if_find {
                     new_line.push(line[i]);
                 }
-
             }
         }
         // 填充0
@@ -290,12 +316,12 @@ impl GameBoard {
         }
         new_line
     }
-    fn move_left(&mut self){
+    fn move_left(&mut self) {
         for i in 0..4 {
             self.tiles[i] = self.move_abstract(self.tiles[i].clone());
         }
     }
-    fn move_right(&mut self){
+    fn move_right(&mut self) {
         for i in 0..4 {
             // 需要反向使用abstract
             let mut line = vec![];
@@ -313,7 +339,7 @@ impl GameBoard {
             // 4 2 0 0
         }
     }
-    fn move_up(&mut self){
+    fn move_up(&mut self) {
         for i in 0..4 {
             // 需要反向使用abstract
             let mut line = vec![];
@@ -326,7 +352,7 @@ impl GameBoard {
             }
         }
     }
-    fn move_down(&mut self){
+    fn move_down(&mut self) {
         for i in (0..4) {
             // 需要反向使用abstract
             let mut line = vec![];
@@ -351,11 +377,6 @@ impl GameBoard {
     }
 }
 
-
-
-
-
-
 // 基础单元测试，移动测试请移步下方
 #[cfg(test)]
 mod tests_base {
@@ -365,7 +386,10 @@ mod tests_base {
         let mut game = GameBoard::new();
         game.tiles[0][0] = 2;
         game.reset_board();
-        assert!(game.tiles.iter().flatten().all(|&x| x == 0), "重置棋盘后，所有格子应为0");
+        assert!(
+            game.tiles.iter().flatten().all(|&x| x == 0),
+            "重置棋盘后，所有格子应为0"
+        );
     }
 
     #[test]
@@ -391,7 +415,6 @@ mod tests_base {
         assert_eq!(points.0, 510, "计算分数失败");
     }
 
-
     #[test]
     fn test_check_game_over() {
         // 设计什么时候棋盘算失败
@@ -414,13 +437,13 @@ mod tests_base {
         let line_new = vec![2, 8, 2, 0];
         let mut game = GameBoard::new();
         let new_line = game.move_abstract(line_ori);
-        assert_eq!(new_line, line_new, "合并失败，实际{:?}, 期望{:?}", new_line, line_new);
-
+        assert_eq!(
+            new_line, line_new,
+            "合并失败，实际{:?}, 期望{:?}",
+            new_line, line_new
+        );
     }
 }
-
-
-
 
 // 对移动功能的单元测试
 // 注意，使用该单元测试时，请关闭 检测棋盘功能/生成tile函数 否则无法正常进行
@@ -444,7 +467,11 @@ mod tests_move {
             vec![0, 0, 4, 8],
             vec![0, 0, 0, 4],
         ];
-        assert_eq!(game.tiles, expected, "向右合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向右合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
 
     #[test]
@@ -463,7 +490,11 @@ mod tests_move {
             vec![8, 4, 0, 0],
             vec![4, 0, 0, 0],
         ];
-        assert_eq!(game.tiles, expected, "向左合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向左合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
 
     #[test]
@@ -482,7 +513,11 @@ mod tests_move {
             vec![0, 0, 0, 0],
             vec![0, 0, 0, 0],
         ];
-        assert_eq!(game.tiles, expected, "向上合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向上合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
 
     #[test]
@@ -501,9 +536,12 @@ mod tests_move {
             vec![4, 8, 0, 2],
             vec![8, 2, 8, 4],
         ];
-        assert_eq!(game.tiles, expected, "向下合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向下合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
 
     #[test]
     fn test_move_tiles_complicated_down_1() {
@@ -521,9 +559,12 @@ mod tests_move {
             vec![4, 8, 0, 2],
             vec![8, 2, 8, 4],
         ];
-        assert_eq!(game.tiles, expected, "向下合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向下合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
 
     #[test]
     fn test_move_tiles_really_complicated_right() {
@@ -541,9 +582,12 @@ mod tests_move {
             vec![0, 0, 4, 4],
             vec![0, 0, 4, 4],
         ];
-        assert_eq!(game.tiles, expected, "向右合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向右合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
 
     //write same testing functions in left, down, up directions
     #[test]
@@ -562,9 +606,12 @@ mod tests_move {
             vec![4, 4, 0, 0],
             vec![4, 4, 0, 0],
         ];
-        assert_eq!(game.tiles, expected, "向左合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向左合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
 
     #[test]
     fn test_move_tiles_really_complicated_up() {
@@ -582,9 +629,12 @@ mod tests_move {
             vec![0, 0, 0, 0],
             vec![0, 0, 0, 0],
         ];
-        assert_eq!(game.tiles, expected, "向上合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向上合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
 
     #[test]
     fn test_move_tiles_really_complicated_do_not_mix() {
@@ -603,9 +653,12 @@ mod tests_move {
             vec![2, 2, 2, 2],
             vec![4, 4, 4, 4],
         ];
-        assert_eq!(game.tiles, expected, "向上下合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "向上下合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
 
     #[test]
     fn test_move_tiles_really_complicated_complete() {
@@ -626,8 +679,10 @@ mod tests_move {
             vec![0, 0, 0, 8],
             vec![0, 0, 0, 16],
         ];
-        assert_eq!(game.tiles, expected, "合并失败: 实际 {:?}, 期望 {:?}", game.tiles, expected);
+        assert_eq!(
+            game.tiles, expected,
+            "合并失败: 实际 {:?}, 期望 {:?}",
+            game.tiles, expected
+        );
     }
-
-
 }
