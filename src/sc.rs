@@ -5,7 +5,7 @@ use crossterm::{
     ExecutableCommand,
 };
 use tui::{
-    backend::{Backend, CrosstermBackend}, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Span, Spans}, widgets::{Block, Borders, Paragraph}, Frame, Terminal
+    backend::{Backend, CrosstermBackend}, layout::{Constraint, Direction as Dire, Layout, Rect}, style::{Color, Style}, text::{Span, Spans}, widgets::{Block, Borders, Paragraph}, Frame, Terminal
 };
 use std::io;
 use rand::Rng;
@@ -13,14 +13,32 @@ use game::{Grid, Move};
 
 mod game;
 
+mod game_board;
+mod game_controller;
+mod io_manager;
+mod bridge;
+
+// mod gui;
+
+use game_board::Direction;
+
+pub use crate::game_board::GameBoard;
+pub use crate::game_controller::GameController;
+pub use crate::io_manager::IOManager;
+pub use crate::bridge::Bridge;
+// pub use crate::gui::GUI;
+
+use std::thread;
+use std::time::Duration;
+
 /// 绘制4x4棋盘的函数
-fn draw_board<B: tui::backend::Backend>(frame: &mut Frame<B>, board: [[u32; 4]; 4]) {
+fn draw_board<B: tui::backend::Backend>(frame: &mut Frame<B>, board: &Vec<Vec<u32>>) {
     let size = frame.size();
     let block = Block::default().title("2048").borders(Borders::ALL);
     frame.render_widget(block, size);
 
     let layout = Layout::default()
-        .direction(Direction::Horizontal)
+        .direction(Dire::Horizontal)
         .margin(2)
         .constraints([Constraint::Percentage(100)].as_ref())
         .split(size);
@@ -40,6 +58,15 @@ fn draw_board<B: tui::backend::Backend>(frame: &mut Frame<B>, board: [[u32; 4]; 
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    // 期盼逻辑
+    // 允许 10ms 后续这种参数放config
+    let mut io_manager = IOManager::new(10);
+    let mut game_board = GameBoard::new();
+    game_board.spawn_tile();
+
+
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     stdout.execute(EnterAlternateScreen)?;
@@ -47,22 +74,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let board = [
-        [2, 4, 8, 16],
-        [32, 64, 128, 256],
-        [512, 1024, 2048, 2],
-        [4, 64, 32, 256],
-    ];
-
-    terminal.draw(|f| {
-        draw_board(f, board);
-    })?;
 
     // 等待用户按任意键退出
     loop {
-        if let Event::Key(_) = read()? {
-            break;
+        if let Some((action)) = io_manager.read_input(1) {
+            match (action) {
+                (Direction::None) => continue,
+                _ => {
+                    // 非None 才管
+                    // io_manager.clear_screen();
+                    game_board.move_tiles(action);
+                    game_board.spawn_tile();
+
+
+                    
+
+                    if game_board.check_game_over() == true {
+                        println!("Game Over!");
+                        if game_board.return_if_win() {
+                            println!("You Win!");
+                        }
+                        else {
+                            print!("You lose!");
+                        }
+                        panic!();
+                    }
+                },
+            }
         }
+        terminal.draw(|f| {
+            draw_board(f, game_board.get_tiles());
+        })?;
     }
 
     terminal.backend_mut().execute(LeaveAlternateScreen)?;
