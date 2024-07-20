@@ -13,7 +13,7 @@ bincode ={ version = "*"}
 serde_json ={ version = "*"}
 serde = { version = "1.0", features = ["derive"] }
 byteorder = { version = "*"}
-
+tui = "0.19.0"
 
 [[bin]]
 name = "server"
@@ -22,3 +22,11 @@ path = "src/server.rs"
 [[bin]]
 name = "client"
 path = "src/client.rs"
+
+[[bin]]
+name = "single_chessboard"
+path = "src/single_chessboard.rs"
+
+[[bin]]
+name = "menu"
+path = "src/menu.rs"
