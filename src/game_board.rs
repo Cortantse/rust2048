@@ -10,6 +10,18 @@ pub enum Direction {
     None,
 }
 
+impl Direction {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right,
+            Direction::Right => Direction::Left,
+            Direction::None => Direction::None,
+        }
+    }
+}
+
 pub struct GameBoard {
     tiles: Vec<Vec<u32>>,        // 用二维向量表示棋盘
     history: Vec<Vec<Vec<u32>>>, // 存储历史棋盘状态

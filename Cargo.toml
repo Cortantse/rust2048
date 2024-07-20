@@ -12,6 +12,7 @@ tokio = { version = "1", features = ["full", "macros"] }
 bincode ={ version = "*"}
 serde_json ={ version = "*"}
 serde = { version = "1.0", features = ["derive"] }
+byteorder = { version = "*"}
 
 
 [[bin]]

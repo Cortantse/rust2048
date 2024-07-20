@@ -12,6 +12,12 @@ pub struct Bridge {
 
 impl Bridge {
     pub fn new(if_bin_direction: bool, direction: Direction, if_open: bool, left_index: usize, right_index: usize, sending_limit: usize) -> Self {
+        if if_bin_direction {
+            println!("Warning: if_bin_direction should be set to false, because only has one tunnel");
+        }
+        if direction == Direction::Left {
+            println!("Warning: direction should be set to right, because only has one tunnel");
+        }
         Self {
             if_bin_direction: if_bin_direction,
             direction: direction,
@@ -31,8 +37,8 @@ impl Bridge {
         self.sending_limit = sending_limit;
     }
 
-    pub fn send_through_bridge(&mut self, recei_board: &mut GameBoard, send_board: &mut GameBoard, direction: Direction) -> Option<Vec<u32>> {
-        if !self.if_legal(recei_board, send_board, direction) {
+    pub fn send_through_bridge(&mut self, recei_board: &mut GameBoard, send_board: &mut GameBoard, direction: Direction, if_player2: bool) -> Option<Vec<u32>> {
+        if !self.if_legal(recei_board, send_board, direction, if_player2) {
             return None;
         }
     
@@ -63,6 +69,11 @@ impl Bridge {
                 for i in 0..length_of_line {
                     send_board.get_tiles_mut()[self.right_index][i] = line_sender_reversed[length_of_line - 1 - i];
                 }
+                // 如果是player1，那么需要反转动画矩阵
+                if !if_player2 {
+                    animated_vector.reverse();
+                }
+                // 反转回来，并返回
                 return Some(animated_vector);
             }
             _ => {return None;}
@@ -108,11 +119,17 @@ impl Bridge {
     }
 
     // 查看当前向尝试的通道操作是否合法
-    fn if_legal(&mut self, board1: &mut GameBoard,  board2: &mut GameBoard, direction: Direction) -> bool {
+    fn if_legal(&mut self, board1: &mut GameBoard,  board2: &mut GameBoard, direction: Direction, if_player2: bool) -> bool {
         // 先检查方向是否合法
         if !self.if_bin_direction {
-            if direction!= self.direction {
-                return false;
+            if !if_player2{
+                if direction!= self.direction {
+                    return false;
+                }
+            }else {
+                if direction!= Direction::opposite(& self.direction) {
+                    return false;
+                }
             }
         }
         match direction {

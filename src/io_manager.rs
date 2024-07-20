@@ -8,6 +8,7 @@ use std::{
     io::{self, Write},
     time::{Duration, Instant},
 };
+use tokio::time;
 
 // use crossterm::event::{self, poll, read, Event, KeyCode, KeyEventKind};
 // use std::time::{Duration, Instant};
@@ -78,6 +79,49 @@ impl IOManager {
 
     //     None
     // }
+
+
+
+    pub async fn read_input_async(&mut self, character: u8) -> Option<Direction> {
+        // Check if the current time since the last input is less than the set interval
+        if self.last_input_time.elapsed() < self.io_response_interval {
+            return None;
+        }
+        // Asynchronously wait for an event with the specified timeout
+        if time::timeout(self.io_response_interval, poll_event()).await.unwrap_or(false) {
+            if let Ok(Event::Key(key_event)) = read() { // Note: This is a blocking call
+                if key_event.kind == KeyEventKind::Press {
+                    self.update_last_input_time(); // Update the last input time
+                    return Some(match key_event.code {
+                        KeyCode::Up | KeyCode::Char('w') => {
+                            print_info(character);
+                            println!("↑");
+                            Direction::Up
+                        },
+                        KeyCode::Left | KeyCode::Char('a') => {
+                            print_info(character);
+                            println!("←");
+                            Direction::Left
+                        },
+                        KeyCode::Down | KeyCode::Char('s') => {
+                            print_info(character);
+                            println!("↓");
+                            Direction::Down
+                        },
+                        KeyCode::Right | KeyCode::Char('d') => {
+                            print_info(character);
+                            println!("→");
+                            Direction::Right
+                        },
+                        _ => Direction::None,
+                    });
+                }
+            }
+        }
+        None
+    }   
+
+
     
 
     pub fn read_input(&mut self, character: u8) -> Option<Direction> {
@@ -163,4 +207,8 @@ pub fn print_info(character: u8){
     //     panic!("character must be 1 or 2");
     // }
     print!("We choose ");
+}
+
+async fn poll_event() -> bool {
+    poll(Duration::from_millis(500)).unwrap_or(false) // Example polling time
 }
