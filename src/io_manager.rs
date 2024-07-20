@@ -94,23 +94,23 @@ impl IOManager {
                     self.update_last_input_time(); // Update the last input time
                     return Some(match key_event.code {
                         KeyCode::Up | KeyCode::Char('w') => {
-                            print_info(character);
-                            println!("↑");
+                            // print_info(character);
+                            // println!("↑");
                             Direction::Up
                         },
                         KeyCode::Left | KeyCode::Char('a') => {
-                            print_info(character);
-                            println!("←");
+                            // print_info(character);
+                            // println!("←");
                             Direction::Left
                         },
                         KeyCode::Down | KeyCode::Char('s') => {
-                            print_info(character);
-                            println!("↓");
+                            // print_info(character);
+                            // println!("↓");
                             Direction::Down
                         },
                         KeyCode::Right | KeyCode::Char('d') => {
-                            print_info(character);
-                            println!("→");
+                            // print_info(character);
+                            // println!("→");
                             Direction::Right
                         },
                         _ => Direction::None,
@@ -138,35 +138,43 @@ impl IOManager {
                     self.update_last_input_time(); // Update the last input time
                     return Some(match key_event.code {
                         KeyCode::Up => {
-                            // println!("↑");
+                            print_info(character);
+                            println!("↑");
                             Direction::Up
                         }
                         KeyCode::Left => {
-                            // println!("←");
+                            print_info(character);
+                            println!("←");
                             Direction::Left
                         }
                         KeyCode::Down => {
-                            // println!("↓");
+                            print_info(character);
+                            println!("↓");
                             Direction::Down
                         }
                         KeyCode::Right => {
-                            // println!("→");
+                            print_info(character);
+                            println!("→");
                             Direction::Right
                         }
                         KeyCode::Char('w') => {
-                            // println!("↑");
+                            print_info(character);
+                            println!("↑");
                             Direction::Up
                         }
                         KeyCode::Char('a') => {
-                            // println!("←");
+                            print_info(character);
+                            println!("←");
                             Direction::Left
                         }
                         KeyCode::Char('s') => {
-                            // println!("↓");
+                            print_info(character);
+                            println!("↓");
                             Direction::Down
                         }
                         KeyCode::Char('d') => {
-                            // println!("→");
+                            print_info(character);
+                            println!("→");
                             Direction::Right
                         }
                         _ => Direction::None,

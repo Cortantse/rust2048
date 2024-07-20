@@ -11,17 +11,48 @@ mod game_controller;
 mod io_manager;
 mod config;
 mod protocol;
+mod dc;
+mod draw;
+use crossterm::{
+    execute,
+    event::{read, Event, KeyCode},
+    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, ClearType},
+    ExecutableCommand,
+};
+use tui::{
+    backend::{Backend, CrosstermBackend}, layout::{Constraint, Direction as Dire, Layout, Rect}, style::{Color, Style}, text::{Span, Spans}, widgets::{Block, Borders, Paragraph}, Frame, Terminal
+};
+use std::io;
+use rand::Rng;
+use game::{Grid, Move};
+use dc::{draw_double_board};
+
+mod game;
 
 use game_board::Direction;
-use protocol::{receive_message, serialize_message, Message, PlayerAction, receive_message_with_buffer};
 
-pub use crate::bridge::Bridge;
 pub use crate::game_board::GameBoard;
 pub use crate::game_controller::GameController;
 pub use crate::io_manager::IOManager;
+pub use crate::bridge::Bridge;
+
+// pub use crate::gui::GUI;
+
+
+use protocol::{receive_message, serialize_message, Message, PlayerAction, receive_message_with_buffer};
+
 
 #[tokio::main]
-async fn main() {
+async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
+    // ui 内容
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    stdout.execute(EnterAlternateScreen)?;
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+
     let mut io_manager = IOManager::new(10);
     // 目标服务器地址
     let address = config::SERVER_IP.to_owned() + ":" + config::SERVER_PORT;
@@ -42,7 +73,6 @@ async fn main() {
         // 尝试连接
         match TcpStream::connect(address).await {
             Ok(mut stream) => {
-                println!("Connected to the server at {}", address);
                 // 成功连接服务器
                 // 获取game board状态，以及是几号玩家
 
@@ -52,7 +82,6 @@ async fn main() {
                     Ok(message) => {
                         match message {
                             Message::PlayerIdentity(identity) => {
-                                println!("Received identity: Player {}", identity.player_number);
                                 our_identity = identity.player_number;
                             },
                             _ => {
@@ -74,7 +103,10 @@ async fn main() {
                                 other_board_ref.set_tiles(game_state.board2);
                                 // 展示棋盘
                                 // 暂时未none，animated_vector实际不为none！！！！！！！
-                                game_board.print_state_with(&other_board_ref, game_state.animated_vector);
+                                // game_board.print_state_with(&other_board_ref, game_state.animated_vector);
+                                terminal.draw(|f| {
+                                    draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles());
+                                })?;
                             },
                             _ => {
                                 println!("Received invalid message: {:?}, Should receive GameState", message);
@@ -97,7 +129,7 @@ async fn main() {
                             match input_result {
                                 Some(action) => match action {
                                     Direction::None => {
-                                        println!("No direction input detected.");
+                                        
                                     },
                                     _ => {
                                         // 序列化方向并发送到服务器
@@ -120,7 +152,11 @@ async fn main() {
                                             game_board.set_tiles(game_state.board1);
                                             other_board_ref.set_tiles(game_state.board2);
                                             // 展示，注意暂时没有animated vector！！！！！！
-                                            game_board.print_state_with(other_board_ref, game_state.animated_vector);
+                                            // game_board.print_state_with(other_board_ref, game_state.animated_vector);
+                                            
+                                            terminal.draw(|f| {
+                                                draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles());
+                                            })?;
                                         },
                                         _ => {
                                             println!("Received invalid message: {:?}, Should receive GameState", message);
@@ -144,4 +180,7 @@ async fn main() {
             }
         }
     }
+    // 关闭ui
+    terminal.backend_mut().execute(LeaveAlternateScreen)?;
+    Ok(())
 }

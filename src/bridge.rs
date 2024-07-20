@@ -206,7 +206,7 @@ mod test_bridge {
 
         let mut bridge = Bridge::new(true, Direction::Left, true, 1,
              1, 200);
-        let animinated_vector = bridge.send_through_bridge(&mut game2, &mut game, Direction::Right);
+        let animinated_vector = bridge.send_through_bridge(&mut game2, &mut game, Direction::Right, true);
 
         let expected1 = vec![
             vec![2, 2, 4, 4],

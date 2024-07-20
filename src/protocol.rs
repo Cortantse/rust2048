@@ -69,8 +69,8 @@ pub async fn receive_message(stream: &mut TcpStream) -> Result<Message, io::Erro
 
     match deserialize_message(message_str) {
         Ok(message) => {
-            eprintln!("Successfully deserialized message.");
-            println!("correct message: {:?}", message);
+            // eprintln!("Successfully deserialized message.");
+            // println!("correct message: {:?}", message);
             Ok(message)
         },
         Err(e) => {
@@ -124,10 +124,10 @@ pub async fn receive_message_with_buffer(stream: &mut TcpStream, buffer: &mut Ve
 /// 解析消息并返回
 fn process_message(data: &[u8]) -> Result<Message, io::Error> {
     let message_str = String::from_utf8_lossy(data);
-    println!("{:?}", message_str);
+    // println!("{:?}", message_str);
     match deserialize_message(&message_str) {
         Ok(message) => {
-            eprintln!("Successfully deserialized message.");
+            // eprintln!("Successfully deserialized message.");
             Ok(message)
         },
         Err(e) => {

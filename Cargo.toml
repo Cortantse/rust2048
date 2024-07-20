@@ -31,3 +31,4 @@ path = "src/sc.rs"
 [[bin]]
 name = "menu"
 path = "src/menu.rs"
+
