@@ -65,39 +65,39 @@ pub fn draw_board<B: Backend>(frame: &mut Frame<B>, area: Rect, board: &Vec<Vec<
 }
 
 
-fn tem() -> Result<(), Box<dyn std::error::Error>> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    stdout.execute(EnterAlternateScreen)?;
+// fn tem() -> Result<(), Box<dyn std::error::Error>> {
+//     enable_raw_mode()?;
+//     let mut stdout = io::stdout();
+//     stdout.execute(EnterAlternateScreen)?;
 
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+//     let backend = CrosstermBackend::new(stdout);
+//     let mut terminal = Terminal::new(backend)?;
 
-    // 测试用的两个4x4数组
-    let board1 = vec![
-        vec![2, 4, 8, 16],
-        vec![32, 64, 128, 256],
-        vec![512, 1024, 2048, 48],
-        vec![32, 8, 16, 32],
-    ];
-    let board2 = vec![
-        vec![2, 4, 8, 16],
-        vec![32, 64, 128, 256],
-        vec![512, 1024, 2048, 48],
-        vec![32, 8, 16, 32],
-    ];
+//     // 测试用的两个4x4数组
+//     let board1 = vec![
+//         vec![2, 4, 8, 16],
+//         vec![32, 64, 128, 256],
+//         vec![512, 1024, 2048, 48],
+//         vec![32, 8, 16, 32],
+//     ];
+//     let board2 = vec![
+//         vec![2, 4, 8, 16],
+//         vec![32, 64, 128, 256],
+//         vec![512, 1024, 2048, 48],
+//         vec![32, 8, 16, 32],
+//     ];
 
-    terminal.draw(|f| {
-        draw_double_board(f, &board1, &board2);
-    })?;
+//     terminal.draw(|f| {
+//         draw_double_board(f, &board1, &board2);
+//     })?;
 
-    // 等待用户按任意键退出
-    loop {
-        if let Event::Key(_) = read()? {
-            break;
-        }
-    }
+//     // 等待用户按任意键退出
+//     loop {
+//         if let Event::Key(_) = read()? {
+//             break;
+//         }
+//     }
 
-    terminal.backend_mut().execute(LeaveAlternateScreen)?;
-    Ok(())
-}
+//     terminal.backend_mut().execute(LeaveAlternateScreen)?;
+//     Ok(())
+// }
