@@ -81,8 +81,8 @@ pub fn run_ui() -> Result<(), Box<dyn std::error::Error>> {
                 KeyCode::Enter => {
                     if let Some(selected) = list_state.selected() {
                         match selected {
-                            0 => println!("启动单人游戏..."),
-                            1 => println!("启动双人游戏..."),
+                            0 => println!("启动单人游戏..."),//这里可以换成转换其他窗口的函数！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
+                            1 => println!("启动双人游戏..."),//这里可以换成转换其他窗口的函数！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
                             2 => game_running = false,
                             _ => {}
                         }
@@ -104,7 +104,8 @@ pub fn run_ui() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn main() {
+
+fn main() {
     if let Err(e) = run_ui() {
         eprintln!("Error running UI: {}", e);
     }
