@@ -89,7 +89,7 @@ async fn main() {
                 // 开始接收并处理来自服务器的更新，主循环逻辑
 
                 // 先初始化缓冲区，注意缓冲区内可能包括之前未读完/不完整的数据
-                let mut buffer: Vec<u8> = vec![0; 4096];
+                let mut buffer = Vec::new();
                 loop {
                     // 接收用户输入操作
                     select! {

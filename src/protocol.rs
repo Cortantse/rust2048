@@ -70,6 +70,7 @@ pub async fn receive_message(stream: &mut TcpStream) -> Result<Message, io::Erro
     match deserialize_message(message_str) {
         Ok(message) => {
             eprintln!("Successfully deserialized message.");
+            println!("correct message: {:?}", message);
             Ok(message)
         },
         Err(e) => {
@@ -101,7 +102,6 @@ pub async fn receive_message_with_buffer(stream: &mut TcpStream, buffer: &mut Ve
     let n = stream.read(&mut temp_buf).await?;
     if n == 0 {
         // 如果没有更多数据可读，检查缓冲区是否空，如果是则报错
-        println!("Connection closed");
         if buffer.is_empty() {
             eprintln!("No data read; stream might be closed.");
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Connection was closed by the server"));
@@ -116,24 +116,27 @@ pub async fn receive_message_with_buffer(stream: &mut TcpStream, buffer: &mut Ve
         let message = process_message(&buffer[..pos])?;  // 处理第一个完整消息，不包括 '\n'
         buffer.drain(..=pos);  // 清空包括 '\n' 在内的已处理部分
         return Ok(message);
-    }else {
-        println!("Unable to give any message");
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Data does not end with a newline"));
     }
-    
+
+    Err(io::Error::new(io::ErrorKind::InvalidData, "Data does not end with a newline"))
 }
 
 /// 解析消息并返回
 fn process_message(data: &[u8]) -> Result<Message, io::Error> {
-    let message_str = str::from_utf8(data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-
-    eprintln!("Received string for deserialization: '{}'", message_str);
-    serde_json::from_str(message_str).map_err(|e| {
-        eprintln!("Failed to deserialize message: {}", e);
-        io::Error::new(io::ErrorKind::InvalidData, format!("Failed to deserialize message: {}", e))
-    })
+    let message_str = String::from_utf8_lossy(data);
+    println!("{:?}", message_str);
+    match deserialize_message(&message_str) {
+        Ok(message) => {
+            eprintln!("Successfully deserialized message.");
+            Ok(message)
+        },
+        Err(e) => {
+            eprintln!("Failed to deserialize message: {}", e);
+            Err(io::Error::new(io::ErrorKind::InvalidData, format!("Failed to deserialize message: {}", e)))
+        }
+    }
 }
+
 
 
 // 写入，序列化方法
