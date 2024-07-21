@@ -31,6 +31,9 @@ pub fn animate_double_move<B: Backend>(
 ) -> Result<(), std::io::Error> {
     let size = terminal.size()?;
 
+    // 由于管道动画出现了恶性的对齐bug，直接手动添加偏移量对齐
+    let pipe_y_offset = 2;
+
     let tile_width: u16 = TILE_WIDTH;
     let tile_height: u16 = TILE_HEIGHT;
     let gap: u16 = 1;
@@ -43,11 +46,11 @@ pub fn animate_double_move<B: Backend>(
     let start_x = if size.width > total_width { (size.width - total_width) / 2 } else { 0 };
 
     let board1_area = Rect::new(start_x, size.y + 2, board_width, tile_height * 4);
-    let pipe_area = Rect::new(start_x + board_width, size.y + 2 + tile_height * 2, pipe_width, tile_height);
+    let pipe_area = Rect::new(start_x + board_width, size.y + 2 + tile_height * 2 + pipe_y_offset, pipe_width, tile_height);
     let board2_area = Rect::new(start_x + board_width + pipe_width, size.y + 2, board_width, tile_height * 4);
 
     // 动画次数
-    let num_steps = 10;
+    let num_steps = 6;
 
     for step in 1..=num_steps {
         terminal.draw(|frame| {
@@ -138,6 +141,7 @@ pub fn animate_double_move<B: Backend>(
 
     Ok(())  // 确保返回一个 Result
 }
+
 
 
 
