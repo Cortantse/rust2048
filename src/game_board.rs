@@ -99,7 +99,7 @@ impl GameBoard {
             Direction::Down => self.move_down(true),
             Direction::Left => self.move_left(true),
             Direction::Right => self.move_right(true),
-            Direction::None => panic!("Should not go to move_tiles function with None direction"),
+            _ => panic!("Should not go to move_tiles function with None direction"),
         }
         // // 内置检查，理论上移动前后不会有数据差别
         // let score = self.return_score();
@@ -127,7 +127,7 @@ impl GameBoard {
             Direction::Down => self.move_down(false),
             Direction::Left => self.move_left(false),
             Direction::Right => self.move_right(false),
-            Direction::None => panic!("Should not go to move_tiles function with None direction"),
+            _ => panic!("Should not go to move_tiles function with None direction"),
         }
         // // 内置检查，理论上移动前后不会有数据差别
         // let score = self.return_score();

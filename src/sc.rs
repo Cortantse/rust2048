@@ -22,7 +22,10 @@ pub use crate::bridge::Bridge;
 pub use crate::game_board::GameBoard;
 pub use crate::game_controller::GameController;
 pub use crate::io_manager::IOManager;
-use game_board::Direction;
+use game_board::{Direction, TileMovement, Position};
+
+use std::thread;
+use std::time::Duration;
 
 fn draw_board<B: Backend>(frame: &mut Frame<B>, board: &Vec<Vec<u32>>) {
     let size = frame.size();
@@ -115,6 +118,88 @@ fn get_bg_color(n: u32) -> Color {
     }
 }
 
+/// 绘制单个瓷砖
+fn draw_tile<B: Backend>(frame: &mut Frame<B>, tile_value: u32, x: u16, y: u16, tile_width: u16, tile_height: u16) {
+    let tile_rect = Rect::new(x, y, tile_width, tile_height);
+    let bg_color = get_bg_color(tile_value);
+    let fg_color = if tile_value > 4 { Color::White } else { Color::Black };
+    let number = format_number(tile_value);
+    let content = format!("\n\n{}\n\n\n", number);
+    let para = Paragraph::new(content)
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::NONE).style(Style::default().bg(bg_color)))
+        .style(Style::default().fg(fg_color).bg(bg_color).add_modifier(Modifier::BOLD));
+
+    frame.render_widget(para, tile_rect);
+}
+
+
+
+
+
+/// 执行瓷砖的动画移动
+fn animate_move<B: Backend>(
+    terminal: &mut Terminal<B>,
+    movements: Vec<TileMovement>,
+    game_board: &GameBoard
+) -> Result<(), std::io::Error> {
+    let size = terminal.size();
+
+    let tile_width: u16 = 13;
+    let tile_height: u16 = 5;
+    let gap: u16 = 1;
+
+    let start_x = (size.as_ref().unwrap().width.saturating_sub(tile_width * 4 + (gap * 3))) / 2;
+    let start_y = (size.as_ref().unwrap().height.saturating_sub(tile_height * 4 + (gap * 3))) / 2;
+
+    let num_steps = 5;  // 动画的步骤数
+
+    for step in 1..=num_steps {
+        // 清除整个屏幕
+        terminal.draw(|frame| {
+            frame.render_widget(Block::default().borders(Borders::NONE).style(Style::default().bg(Color::Black)), frame.size());
+
+            // 绘制每个移动的瓷砖动画
+            for movement in &movements {
+                let TileMovement { start_pos, end_pos, value } = movement;
+                let (start_x_abs, start_y_abs) = calculate_absolute_position(*start_pos, tile_width, tile_height, gap, start_x, start_y);
+                let (end_x_abs, end_y_abs) = calculate_absolute_position(*end_pos, tile_width, tile_height, gap, start_x, start_y);
+                let x = interpolate(start_x_abs, end_x_abs, step, num_steps);
+                let y = interpolate(start_y_abs, end_y_abs, step, num_steps);
+                draw_tile(frame, *value, x, y, tile_width, tile_height);
+            }
+        })?;
+
+        // 等待一段时间，形成动画效果
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    // 动画结束后再次绘制静态的棋盘状态
+    terminal.draw(|frame| {
+        draw_board(frame, &game_board.get_tiles());
+    })?;
+
+    Ok(())  // 确保返回一个 Result
+}
+
+/// 计算瓷砖在屏幕上的绝对位置
+fn calculate_absolute_position(pos: Position, tile_width: u16, tile_height: u16, gap: u16, start_x: u16, start_y: u16) -> (u16, u16) {
+    let x = start_x + pos.x as u16 * (tile_width + gap + 1);  // 注意这里的加1，以对齐静态绘制
+    let y = start_y + pos.y as u16 * (tile_height + gap);
+    (x, y)
+}
+
+
+/// 线性插值计算当前步骤的瓷砖位置
+fn interpolate(start: u16, end: u16, step: usize, num_steps: usize) -> u16 {
+    if start <= end {
+        start + ((end - start) as usize * step / num_steps) as u16
+    } else {
+        start - ((start - end) as usize * step / num_steps) as u16
+    }
+}
+
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 期盼逻辑
     // 允许 10ms 后续这种参数放config
@@ -128,6 +213,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    terminal.draw(|f| {
+        draw_board(f, &game_board.get_tiles());
+    })?;
 
     // 等待用户按任意键退出
     loop {
@@ -145,6 +234,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // 非None 才管
                     // io_manager.clear_screen();
                     game_board.move_tiles(action);
+
+                    //测试
+                    let movements = game_board.get_tile_movements(game_board.get_tiles().clone(), action, vec![]);
+                    // 在绘制函数内部调用动画函数
+                    animate_move(&mut terminal, movements, &game_board)?;
+
                     game_board.spawn_tile();
 
                     if game_board.check_game_over() == true {

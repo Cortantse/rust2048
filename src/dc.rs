@@ -53,7 +53,7 @@ pub fn draw_board<B: Backend>(frame: &mut Frame<B>, area: Rect, board: &Vec<Vec<
             let tile_rect = Rect::new(x, y, tile_width, tile_height);
 
             let bg_color = get_bg_color(num);
-            let fg_color = if num > 4 { Color::White } else { Color::Black };
+            let fg_color = Color::Black ;
 
             let number = if num > 0 { format_number(num) } else { String::new() };
             let content = format!("\n{}\n", number);
@@ -76,14 +76,15 @@ pub fn draw_pipe<B: Backend>(frame: &mut Frame<B>, area: Rect, data: &[u8]) {
         let y = area.y;  // 维持在第三行位置
         let tile_rect = Rect::new(x, y + 2, TILE_WIDTH, TILE_HEIGHT);  // 定义格子的位置和尺寸
 
+        // 格式化数字，确保垂直居中，加两行换行符作为上下填充
         let content = if i < data.len() {
-            format_number(data[i] as u32)  // 格式化存在的数据
+            format!("\n{}\n", format_number(data[i] as u32))  // 在数字前后添加换行符以实现垂直居中
         } else {
-            String::from(" ")  // 数据不存在则显示空格
+            String::from("\n \n")  // 没有数据时显示空行，保持格子不显示乱码或旧数据
         };
 
         let para = Paragraph::new(content)
-            .alignment(Alignment::Center)
+            .alignment(Alignment::Center)  // 水平居中
             .block(Block::default().borders(Borders::NONE).style(Style::default().bg(pipe_color)))
             .style(Style::default().fg(Color::White));  // 设置文字和背景颜色
 
