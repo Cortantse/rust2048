@@ -124,6 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut game_board = GameBoard::new();
     let mut other_board = GameBoard::new();
+    let data = vec![0,0,0];
     let ref mut other_board_ref = other_board;
 
     let mut our_identity = 0;

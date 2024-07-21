@@ -1,6 +1,23 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
+/// 表示棋盘上的位置，使用行和列索引
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Position {
+    pub x: usize,  // 列索引
+    pub y: usize,  // 行索引
+}
+
+/// 瓷砖移动信息，包含起始位置、结束位置和瓷砖数值
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TileMovement {
+    pub start_pos: Position,
+    pub end_pos: Position,
+    pub value: u32,
+}
+
+
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Direction {
     Up,
@@ -78,18 +95,46 @@ impl GameBoard {
         self.save_current_state();
         let last_score = self.return_score();
         match direction {
-            Direction::Up => self.move_up(),
-            Direction::Down => self.move_down(),
-            Direction::Left => self.move_left(),
-            Direction::Right => self.move_right(),
-            _ => panic!("Should not go to move_tiles function with None direction"),
+            Direction::Up => self.move_up(true),
+            Direction::Down => self.move_down(true),
+            Direction::Left => self.move_left(true),
+            Direction::Right => self.move_right(true),
+            Direction::None => panic!("Should not go to move_tiles function with None direction"),
         }
-        // 内置检查，理论上移动前后不会有数据差别
-        let score = self.return_score();
-        if last_score.0 != score.0 {
-            print!("Score {:?} is not equal to {:?}", last_score, score);
-            panic!();
+        // // 内置检查，理论上移动前后不会有数据差别
+        // let score = self.return_score();
+        // if last_score.0 != score.0 {
+        //     print!("Score {:?} is not equal to {:?}", last_score, score);
+        //     panic!();
+        // }
+        // 放置新tile
+        // self.spawn_tile();
+
+        // 检查游戏是否结束
+        // if self.check_game_over() {
+        //     println!("Game over!");
+        //     std::process::exit(0);
+        // }
+    }
+
+
+    fn move_tiles_without_merge(&mut self, direction: Direction) {
+        // 根据用户输入的方向移动和合并数字块，不合并，私有函数，用于ui时用
+        self.save_current_state();
+        let last_score = self.return_score();
+        match direction {
+            Direction::Up => self.move_up(false),
+            Direction::Down => self.move_down(false),
+            Direction::Left => self.move_left(false),
+            Direction::Right => self.move_right(false),
+            Direction::None => panic!("Should not go to move_tiles function with None direction"),
         }
+        // // 内置检查，理论上移动前后不会有数据差别
+        // let score = self.return_score();
+        // if last_score.0 != score.0 {
+        //     print!("Score {:?} is not equal to {:?}", last_score, score);
+        //     panic!();
+        // }
         // 放置新tile
         // self.spawn_tile();
 
@@ -135,7 +180,7 @@ impl GameBoard {
             // 没有位置了
 
             self.save_current_state(); // 便于还原
-            self.move_down();
+            self.move_down(true);
             if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
@@ -143,7 +188,7 @@ impl GameBoard {
             self.undo_move();
 
             self.save_current_state(); // 便于还原
-            self.move_left();
+            self.move_left(true);
             if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
@@ -151,7 +196,7 @@ impl GameBoard {
             self.undo_move();
 
             self.save_current_state();
-            self.move_up();
+            self.move_up(true);
             if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
@@ -159,7 +204,7 @@ impl GameBoard {
             self.undo_move();
 
             self.save_current_state();
-            self.move_right();
+            self.move_right(true);
             if self.if_have_empty_tile() {
                 self.undo_move();
                 return false;
@@ -294,7 +339,7 @@ impl GameBoard {
         println!("===================="); //换个行
     }
 
-    pub fn move_abstract(&mut self, mut line: Vec<u32>) -> Vec<u32> {
+    pub fn move_abstract(&mut self, mut line: Vec<u32>, if_merge: bool) -> Vec<u32> {
         // 返回一个向左的合并数组
         let mut new_line = vec![];
         let len_of_line = line.len();
@@ -303,18 +348,21 @@ impl GameBoard {
                 // 如果为0那么不管了
                 // 进行合并
                 let mut if_find = false;
-                for j in i + 1..len_of_line {
-                    if line[j] == line[i] {
-                        // 相等，清空
-                        new_line.push(line[i] * 2);
-                        line[i] = 0;
-                        line[j] = 0;
-                        if_find = true;
-                        break;
-                    }
-                    if line[j] != 0 {
-                        // 匹配失败且中间格非空，则失败
-                        break;
+                // 如果不需要合并则不进行这个合并逻辑
+                if if_merge {
+                    for j in i + 1..len_of_line {
+                        if line[j] == line[i] {
+                            // 相等，清空
+                            new_line.push(line[i] * 2);
+                            line[i] = 0;
+                            line[j] = 0;
+                            if_find = true;
+                            break;
+                        }
+                        if line[j] != 0 {
+                            // 匹配失败且中间格非空，则失败
+                            break;
+                        }
                     }
                 }
                 // 判断是否合并成功
@@ -330,19 +378,19 @@ impl GameBoard {
         }
         new_line
     }
-    fn move_left(&mut self) {
+    fn move_left(&mut self, if_merge: bool) {
         for i in 0..4 {
-            self.tiles[i] = self.move_abstract(self.tiles[i].clone());
+            self.tiles[i] = self.move_abstract(self.tiles[i].clone(), if_merge);
         }
     }
-    fn move_right(&mut self) {
+    fn move_right(&mut self, if_merge: bool) {
         for i in 0..4 {
             // 需要反向使用abstract
             let mut line = vec![];
             for j in (0..4).rev() {
                 line.push(self.tiles[i][j]);
             }
-            line = self.move_abstract(line);
+            line = self.move_abstract(line, if_merge);
             for j in (0..4).rev() {
                 self.tiles[i][j] = line[4 - 1 - j];
             }
@@ -353,27 +401,27 @@ impl GameBoard {
             // 4 2 0 0
         }
     }
-    fn move_up(&mut self) {
+    fn move_up(&mut self,if_merge: bool) {
         for i in 0..4 {
             // 需要反向使用abstract
             let mut line = vec![];
             for j in 0..4 {
                 line.push(self.tiles[j][i]);
             }
-            line = self.move_abstract(line);
-            for j in 0..4 {
+            line = self.move_abstract(line, if_merge);
+            for j in (0..4) {
                 self.tiles[j][i] = line[j];
             }
         }
     }
-    fn move_down(&mut self) {
-        for i in 0..4 {
+    fn move_down(&mut self, if_merge: bool) {
+        for i in (0..4) {
             // 需要反向使用abstract
             let mut line = vec![];
             for j in (0..4).rev() {
                 line.push(self.tiles[j][i]);
             }
-            line = self.move_abstract(line);
+            line = self.move_abstract(line, if_merge);
             for j in (0..4).rev() {
                 self.tiles[j][i] = line[4 - 1 - j];
             }
@@ -389,7 +437,106 @@ impl GameBoard {
         }
         false
     }
+
+    // 使用时注意这不包含管道的逻辑
+    pub fn get_tile_movements(&mut self, mut updated_chb_status: Vec<Vec<u32>>, action: Direction, other_movement_from_pipe: Vec<TileMovement>) -> Vec<TileMovement> {
+        let mut movements = other_movement_from_pipe.clone();  // 包含来自管道的其它动画移动
+
+        // 根据 updated_chb_status 获得 ori_chb_status, 采取反转动作不合并来获得
+        let mut tem = GameBoard::new();
+        tem.set_tiles(updated_chb_status.clone());
+        tem.move_tiles_without_merge(Direction::opposite(&action));
+        let ori_chb_status = tem.get_tiles_mut();
+
+        let size = ori_chb_status.len();
+
+        let mut find_next_position = |x: usize, y: usize| -> Option<Position> {
+            match action {
+                Direction::Up => {
+                    for ny in 0..size {
+                        if updated_chb_status[ny][x] != 0 {
+                            let pos = Position { x, y: ny };
+                            updated_chb_status[ny][x] = 0;  // 标记为已处理
+                            return Some(pos);
+                        }
+                    }
+                },
+                Direction::Down => {
+                    for ny in (0..size).rev() {
+                        if updated_chb_status[ny][x] != 0 {
+                            let pos = Position { x, y: ny };
+                            updated_chb_status[ny][x] = 0;  // 标记为已处理
+                            return Some(pos);
+                        }
+                    }
+                },
+                Direction::Left => {
+                    for nx in 0..size {
+                        if updated_chb_status[y][nx] != 0 {
+                            let pos = Position { x: nx, y };
+                            updated_chb_status[y][nx] = 0;  // 标记为已处理
+                            return Some(pos);
+                        }
+                    }
+                },
+                Direction::Right => {
+                    for nx in (0..size).rev() {
+                        if updated_chb_status[y][nx] != 0 {
+                            let pos = Position { x: nx, y };
+                            updated_chb_status[y][nx] = 0;  // 标记为已处理
+                            return Some(pos);
+                        }
+                    }
+                },
+                _ => {}
+            }
+            None
+        };
+
+        match action {
+            Direction::Up | Direction::Left => {
+                for y in 0..size {
+                    for x in 0..size {
+                        if ori_chb_status[y][x] != 0 {
+                            if let Some(new_pos) = find_next_position(x, y) {
+                                movements.push(TileMovement {
+                                    start_pos: Position { x, y },
+                                    end_pos: new_pos,
+                                    value: ori_chb_status[y][x],
+                                });
+                                ori_chb_status[y][x] = 0;  // 标记为已处理
+                            }
+                        }
+                    }
+                }
+            },
+            Direction::Down | Direction::Right => {
+                for y in (0..size).rev() {
+                    for x in (0..size).rev() {
+                        if ori_chb_status[y][x] != 0 {
+                            if let Some(new_pos) = find_next_position(x, y) {
+                                movements.push(TileMovement {
+                                    start_pos: Position { x, y },
+                                    end_pos: new_pos,
+                                    value: ori_chb_status[y][x],
+                                });
+                                ori_chb_status[y][x] = 0;  // 标记为已处理
+                            }
+                        }
+                    }
+                }
+            },
+            _ => {}
+        }
+
+        movements
+    }
+
 }
+
+
+
+
 
 // 基础单元测试，移动测试请移步下方
 #[cfg(test)]
@@ -450,7 +597,7 @@ mod tests_base {
         let line_ori = vec![2, 4, 4, 2];
         let line_new = vec![2, 8, 2, 0];
         let mut game = GameBoard::new();
-        let new_line = game.move_abstract(line_ori);
+        let new_line = game.move_abstract(line_ori, true);
         assert_eq!(
             new_line, line_new,
             "合并失败，实际{:?}, 期望{:?}",
