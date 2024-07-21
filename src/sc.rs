@@ -1,35 +1,28 @@
 use crossterm::{
-    execute,
-    event::{read, Event, KeyCode},
-    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, ClearType},
+    terminal::{enable_raw_mode, EnterAlternateScreen},
     ExecutableCommand,
 };
+
+use std::io;
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction as Dire, Layout, Rect, Alignment},
-    style::{Color, Style, Modifier},
-    text::{Span, Spans, Text},
+    layout::{Alignment, Rect},
+    style::{Color, Modifier, Style},
     widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
 };
-use std::io;
-use rand::Rng;
-use game::{Grid, Move};
 
+mod bridge;
 mod game;
 mod game_board;
 mod game_controller;
 mod io_manager;
-mod bridge;
 
-use game_board::Direction;
+pub use crate::bridge::Bridge;
 pub use crate::game_board::GameBoard;
 pub use crate::game_controller::GameController;
 pub use crate::io_manager::IOManager;
-pub use crate::bridge::Bridge;
-
-use std::thread;
-use std::time::Duration;
+use game_board::Direction;
 
 fn draw_board<B: Backend>(frame: &mut Frame<B>, board: &Vec<Vec<u32>>) {
     let size = frame.size();
@@ -37,12 +30,18 @@ fn draw_board<B: Backend>(frame: &mut Frame<B>, board: &Vec<Vec<u32>>) {
     frame.render_widget(block, size);
 
     // 增加方块高度，减少宽度，调整间隙
-    let tile_width: u16 = 13;  // 方块的调整后的宽度
-    let tile_height: u16 = 5;  // 方块的调整后的高度
-    let gap: u16 = 1;          // 增加间隙尺寸以达到视觉平衡
+    let tile_width: u16 = 13; // 方块的调整后的宽度
+    let tile_height: u16 = 5; // 方块的调整后的高度
+    let gap: u16 = 1; // 增加间隙尺寸以达到视觉平衡
 
-    let start_x = (size.width.saturating_sub(tile_width * board[0].len() as u16 + (gap * (board[0].len() as u16 - 1)))) / 2;
-    let start_y = (size.height.saturating_sub(tile_height * board.len() as u16 + (gap * (board.len() as u16 - 1)))) / 2;
+    let start_x = (size
+        .width
+        .saturating_sub(tile_width * board[0].len() as u16 + (gap * (board[0].len() as u16 - 1))))
+        / 2;
+    let start_y = (size
+        .height
+        .saturating_sub(tile_height * board.len() as u16 + (gap * (board.len() as u16 - 1))))
+        / 2;
 
     for (i, row) in board.iter().enumerate() {
         for (j, &num) in row.iter().enumerate() {
@@ -53,22 +52,35 @@ fn draw_board<B: Backend>(frame: &mut Frame<B>, board: &Vec<Vec<u32>>) {
             let bg_color = get_bg_color(num);
             let fg_color = if num > 4 { Color::White } else { Color::Black };
 
-            let number = if num > 0 { format_number(num) } else { String::new() };
+            let number = if num > 0 {
+                format_number(num)
+            } else {
+                String::new()
+            };
             let content = format!("\n\n{}\n\n\n", number);
             let para = Paragraph::new(content)
                 .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::NONE).style(Style::default().bg(bg_color)))
-                .style(Style::default().fg(fg_color).bg(bg_color).add_modifier(Modifier::BOLD));
+                .block(
+                    Block::default()
+                        .borders(Borders::NONE)
+                        .style(Style::default().bg(bg_color)),
+                )
+                .style(
+                    Style::default()
+                        .fg(fg_color)
+                        .bg(bg_color)
+                        .add_modifier(Modifier::BOLD),
+                );
 
             frame.render_widget(para, tile_rect);
         }
     }
 }
 
-
 /// 使用全角字符显示数字
 fn format_number(num: u32) -> String {
-    num.to_string().chars()
+    num.to_string()
+        .chars()
         .map(|ch| match ch {
             '0' => '０',
             '1' => '１',
@@ -104,14 +116,11 @@ fn get_bg_color(n: u32) -> Color {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     // 期盼逻辑
     // 允许 10ms 后续这种参数放config
     let mut io_manager = IOManager::new(10);
     let mut game_board = GameBoard::new();
     game_board.spawn_tile();
-
-
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -120,32 +129,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-
     // 等待用户按任意键退出
     loop {
-        if let Some((action)) = io_manager.read_input(1) {
-            match (action) {
-                (Direction::None) => continue,
+        if let Some(action) = io_manager.read_input(1) {
+            match action {
+                Direction::None => continue,
+                Direction::Quit => {
+                    // Command::new("cargo")
+                    //     .args(&["run", "--bin", "menu"])
+                    //     .spawn()?
+                    //     .wait()?;
+                    break;
+                }
                 _ => {
                     // 非None 才管
                     // io_manager.clear_screen();
                     game_board.move_tiles(action);
                     game_board.spawn_tile();
 
-
-                    
-
                     if game_board.check_game_over() == true {
                         println!("Game Over!");
                         if game_board.return_if_win() {
                             println!("You Win!");
-                        }
-                        else {
+                        } else {
                             print!("You lose!");
                         }
-                        return Ok(());
+                        panic!();
                     }
-                },
+                }
             }
         }
         terminal.draw(|f| {
@@ -153,6 +164,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     }
 
-    terminal.backend_mut().execute(LeaveAlternateScreen)?;
+    // terminal.backend_mut().execute(LeaveAlternateScreen)?;
     Ok(())
 }

@@ -1,4 +1,4 @@
-use rand::{random, Rng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// 表示棋盘上的位置，使用行和列索引
@@ -24,6 +24,7 @@ pub enum Direction {
     Down,
     Left,
     Right,
+    Quit,
     None,
 }
 
@@ -34,6 +35,7 @@ impl Direction {
             Direction::Down => Direction::Up,
             Direction::Left => Direction::Right,
             Direction::Right => Direction::Left,
+            Direction::Quit => Direction::Quit,
             Direction::None => Direction::None,
         }
     }
@@ -304,7 +306,7 @@ impl GameBoard {
                     for item in print_vector {
                         print!("{} ", item);
                     }
-                    for i in 0..10 - space_occupied {
+                    for _ in 0..10 - space_occupied {
                         print!(" ");
                     }
                     print!(
@@ -371,7 +373,7 @@ impl GameBoard {
         }
         // 填充0
         let fill_zero_size = len_of_line - new_line.len();
-        for i in 0..fill_zero_size {
+        for _ in 0..fill_zero_size {
             new_line.push(0);
         }
         new_line
@@ -403,7 +405,7 @@ impl GameBoard {
         for i in 0..4 {
             // 需要反向使用abstract
             let mut line = vec![];
-            for j in (0..4) {
+            for j in 0..4 {
                 line.push(self.tiles[j][i]);
             }
             line = self.move_abstract(line, if_merge);
@@ -426,8 +428,8 @@ impl GameBoard {
         }
     }
     fn if_have_empty_tile(&mut self) -> bool {
-        for i in (0..4) {
-            for j in (0..4) {
+        for i in 0..4 {
+            for j in 0..4 {
                 if self.tiles[i][j] == 0 {
                     return true;
                 }

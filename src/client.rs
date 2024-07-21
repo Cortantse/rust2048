@@ -1,50 +1,110 @@
-use bincode;
-use crossterm::terminal::SetTitle;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use crossterm::{
+    event::{self, Event, KeyCode},
+    terminal::{enable_raw_mode, EnterAlternateScreen},
+    ExecutableCommand,
+};
+use std::io;
+use std::process;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use tokio::time::{sleep, Duration};
 use tokio::select;
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
+use tui::{
+    backend::CrosstermBackend,
+    layout::Alignment,
+    style::{Color, Style},
+    text::{Span, Spans},
+    widgets::{Block, Borders, Paragraph},
+    Terminal,
+};
 
 mod bridge;
+mod config;
+mod dc;
+mod draw;
 mod game_board;
 mod game_controller;
 mod io_manager;
-mod config;
 mod protocol;
-mod dc;
-mod draw;
-use crossterm::{
-    execute,
-    event::{read, Event, KeyCode},
-    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, ClearType},
-    ExecutableCommand,
-};
-use tui::{
-    backend::{Backend, CrosstermBackend}, layout::{Constraint, Direction as Dire, Layout, Rect}, style::{Color, Style}, text::{Span, Spans}, widgets::{Block, Borders, Paragraph}, Frame, Terminal
-};
-use std::io;
-use rand::Rng;
-use game::{Grid, Move};
-use dc::{draw_double_board};
-
-mod game;
-
+use dc::draw_double_board;
 use game_board::Direction;
+use protocol::{
+    receive_message, receive_message_with_buffer, serialize_message, Message, PlayerAction,
+};
 
+pub use crate::bridge::Bridge;
 pub use crate::game_board::GameBoard;
 pub use crate::game_controller::GameController;
 pub use crate::io_manager::IOManager;
-pub use crate::bridge::Bridge;
 
-// pub use crate::gui::GUI;
+async fn show_loading_screen(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    running: &mut bool,
+    mut rx_main: mpsc::Receiver<String>,
+    tx_main: mpsc::Sender<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut frame_count = 0;
+    let spinner_frames = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let spinner_length = spinner_frames.len();
 
+    while *running {
+        if let Ok(message) = rx_main.try_recv() {
+            if message != "Connected successfully".to_string() {
+                terminal.draw(|f| {
+                    let size = f.size();
+                    let block = Block::default().title("错误").borders(Borders::ALL);
+                    let text = vec![Spans::from(Span::styled(
+                        "匹配失败，將返回主界面",
+                        Style::default().fg(Color::Red),
+                    ))];
+                    let paragraph = Paragraph::new(text)
+                        .block(block)
+                        .alignment(Alignment::Center);
+                    f.render_widget(paragraph, size);
+                })?;
+                let _ = sleep(Duration::from_secs(3));
+            }
+            break;
+        }
 
-use protocol::{receive_message, serialize_message, Message, PlayerAction, receive_message_with_buffer};
+        if event::poll(Duration::from_millis(10))? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Char('q') {
+                    *running = false;
+                    let _ = tx_main.send("User requested exit".to_string()).await;
+                    break;
+                }
+            }
+        }
 
+        let frame_index = frame_count % spinner_length;
+        let spinner = spinner_frames[frame_index];
+        terminal.draw(|f| {
+            let size = f.size();
+            let block = Block::default()
+                .title("等待匹配中...")
+                .borders(Borders::ALL);
+            let text = vec![
+                Spans::from(Span::styled(spinner, Style::default().fg(Color::Yellow))),
+                Spans::from(Span::styled(
+                    "按 'q' 退出",
+                    Style::default().fg(Color::White),
+                )),
+            ];
+            let paragraph = Paragraph::new(text)
+                .block(block)
+                .alignment(Alignment::Center);
+            f.render_widget(paragraph, size);
+        })?;
+        frame_count += 1;
+        sleep(Duration::from_millis(100)).await;
+    }
+    Ok(())
+}
 
 #[tokio::main]
-async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
-    // ui 内容
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     stdout.execute(EnterAlternateScreen)?;
@@ -52,39 +112,62 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    let mut stdout1 = io::stdout();
+    stdout1.execute(EnterAlternateScreen)?;
+
+    let backend1 = CrosstermBackend::new(stdout1);
+    let mut terminal1 = Terminal::new(backend1)?;
 
     let mut io_manager = IOManager::new(10);
-    // 目标服务器地址
     let address = config::SERVER_IP.to_owned() + ":" + config::SERVER_PORT;
-    let address:&str = address.as_str();
+    let address: &str = address.as_str();
 
-    // 本地创建双方棋盘实例，这里默认就是双人模式
     let mut game_board = GameBoard::new();
     let mut other_board = GameBoard::new();
     let data = vec![0,0,0];
     let ref mut other_board_ref = other_board;
 
-    // 自身在服务器等级的identity号
     let mut our_identity = 0;
+    let mut a = 0;
 
-    // 尝试连接服务器，尝试k次
+    let mut running = true;
+
+    let (tx_to_async, rx_from_main) = mpsc::channel(1);
+    let (tx_to_main, mut rx_from_async) = mpsc::channel(1);
+
+    let _ = tokio::spawn({
+        async move {
+            let _ =
+                show_loading_screen(&mut terminal1, &mut running, rx_from_main, tx_to_main).await;
+        }
+    });
+
     for _ in 0..config::CLIENT_MAX_RETRIES {
-
-
-        // 尝试连接
+        if let Ok(_) = rx_from_async.try_recv() {
+            // println!("Received error message: {}", error_message);
+            terminal.draw(|f| {
+                let size = f.size();
+                let block = Block::default().title("错误").borders(Borders::ALL);
+                let text = vec![Spans::from(Span::styled(
+                    "匹配失败，將返回主界面",
+                    Style::default().fg(Color::Red),
+                ))];
+                let paragraph = Paragraph::new(text)
+                    .block(block)
+                    .alignment(Alignment::Center);
+                f.render_widget(paragraph, size);
+            })?;
+            let _ = sleep(Duration::from_secs(3));
+            break;
+        }
         match TcpStream::connect(address).await {
             Ok(mut stream) => {
-                // 成功连接服务器
-                // 获取game board状态，以及是几号玩家
-
-
-                // 1、先获取自己是几号玩家
                 match receive_message(&mut stream).await {
                     Ok(message) => {
                         match message {
                             Message::PlayerIdentity(identity) => {
                                 our_identity = identity.player_number;
-                            },
+                            }
                             _ => {
                                 println!("Received invalid message: {:?}, Should receive Player Identity", message);
                                 panic!("Client Should receive Player Identity");
@@ -93,96 +176,90 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
                     }
                     Err(e) => eprintln!("Failed to receive message: {}", e),
                 }
-                
-                // 2、获取双方的初始矩阵
                 match receive_message(&mut stream).await {
-                    Ok(message) => {
-                        match message {
-                            Message::GameState(game_state) => {
-                                // 这里要根据不同的角色
-                                game_board.set_tiles(game_state.board1);
-                                other_board_ref.set_tiles(game_state.board2);
-                    
-                                // 展示棋盘
-                                // 暂时未none，animated_vector实际不为none！！！！！！！
-                                // game_board.print_state_with(&other_board_ref, game_state.animated_vector);
-                                terminal.draw(|f| {
-                                    draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles(), &data);
-                                })?;
-                            },
-                            _ => {
-                                println!("Received invalid message: {:?}, Should receive GameState", message);
-                                panic!("Client Should receive GameState");
-                            }
+                    Ok(message) => match message {
+                        Message::GameState(game_state) => {
+                            game_board.set_tiles(game_state.board1);
+                            other_board_ref.set_tiles(game_state.board2);
+                            let _ = tx_to_async.send("Connected successfully".to_string()).await;
+                            terminal.clear()?;
+                            terminal.draw(|f| {
+                                draw_double_board(
+                                    f,
+                                    game_board.get_tiles(),
+                                    other_board_ref.get_tiles(),
+                                );
+                            })?;
                         }
-                    }
+                        _ => {
+                            println!(
+                                "Received invalid message: {:?}, Should receive GameState",
+                                message
+                            );
+                            panic!("Client Should receive GameState");
+                        }
+                    },
                     Err(e) => eprintln!("Failed to receive message: {}", e),
                 }
-    
 
-                // 开始接收并处理来自服务器的更新，主循环逻辑
-
-                // 先初始化缓冲区，注意缓冲区内可能包括之前未读完/不完整的数据
                 let mut buffer = Vec::new();
                 loop {
-                    // 接收用户输入操作
                     select! {
                         input_result = io_manager.read_input_async(our_identity) => {
                             match input_result {
                                 Some(action) => match action {
-                                    Direction::None => {
-                                        
+                                    Direction::None => {},
+                                    Direction::Quit => {
+                                        terminal.clear()?;
+                                        process::exit(0); // 终止进程
                                     },
                                     _ => {
-                                        // 序列化方向并发送到服务器
                                         let player_action = PlayerAction { direction: action };
                                         let message = Message::PlayerAction(player_action);
                                         let serialized = serialize_message(&message).unwrap();
                                         stream.write_all(serialized.as_bytes()).await.unwrap();
                                     }
                                 },
-                                None => {
-                                    continue;
-                                },
+                                None => continue,
                             }
                         },
                         message_result = receive_message_with_buffer(&mut stream, &mut buffer) => {
                             match message_result {
-                                Ok(message) => {
-                                    match message {
-                                        Message::GameState(game_state) => {
-                                            game_board.set_tiles(game_state.board1);
-                                            other_board_ref.set_tiles(game_state.board2);
-                                            // 展示，注意暂时没有animated vector！！！！！！
-                                            // game_board.print_state_with(other_board_ref, game_state.animated_vector);
-                                            
-                                            terminal.draw(|f| {
-                                                draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles(), &data);
-                                            })?;
-                                        },
-                                        _ => {
-                                            println!("Received invalid message: {:?}, Should receive GameState", message);
-                                            panic!("Client Should receive GameState");
-                                        }
+                                Ok(message) => match message {
+                                    Message::GameState(game_state) => {
+                                        game_board.set_tiles(game_state.board1);
+                                        other_board_ref.set_tiles(game_state.board2);
+                                        terminal.draw(|f| {
+                                            draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles());
+                                        })?;
+                                    },
+                                    _ => {
+                                        // println!("Received invalid message: {:?}, Should receive GameState", message);
+                                        panic!("Client Should receive GameState");
                                     }
                                 },
-                                Err(e) => {
-                                    eprintln!("Failed to receive message: {}", e);
+                                Err(_) => {
+                                    // eprintln!("Failed to receive message: {}", e);
                                 },
                             }
                         },
                     }
                 }
-                // end of loop
             }
             Err(e) => {
-                println!("Failed to connect: {:?}", e);
-                // 失败，暂停一会
+                a += 1;
+                // println!("{}, Failed to connect: {:?}", a, e);
+                if a == config::CLIENT_MAX_RETRIES {
+                    let _ = tx_to_async
+                        .send(format!("Failed to connect: {:?}", e))
+                        .await;
+                }
+
                 sleep(Duration::from_secs(config::CLIENT_MAX_RETRIES_PER_REQUEST)).await;
             }
         }
     }
-    // 关闭ui
-    terminal.backend_mut().execute(LeaveAlternateScreen)?;
+    // loading_task.await.unwrap(); // 确保加载动画任务正确结束
+
     Ok(())
 }
