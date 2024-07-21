@@ -18,6 +18,7 @@ use tui::{
     widgets::{Block, Borders, Paragraph},
     Terminal,
 };
+use game_board::Direction;
 
 mod bridge;
 mod config;
@@ -26,8 +27,8 @@ mod draw;
 mod game_board;
 mod io_manager;
 mod protocol;
-use dc::{animate_double_move, draw_double_board};
-use game_board::Direction;
+use dc::{animate_double_move, draw_double_board, animate_pipe};
+
 use protocol::{
     receive_message, receive_message_with_buffer, serialize_message, Message, PlayerAction,
 };
@@ -254,8 +255,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         //测试
                                         let movements1 = game_board.get_tile_movements(last_game_board_status, game_board.get_tiles().clone(), game_state.action1, vec![]);
                                         let movements2 = game_board.get_tile_movements(last_other_board_status, other_board_ref.get_tiles().clone(), game_state.action2, vec![]);
+                                        //获取有效动作
+                                        let action = match (game_state.action1, game_state.action2) {
+                                            (Direction::None, x) => x,
+                                             (x, Direction::None) => x,
+                                             _ => Direction::None,
+                                        };
                                         // 在绘制函数内部调用动画函数
-                                        animate_double_move(&mut terminal, movements1, movements2, game_board.get_tiles().clone().as_ref(), other_board_ref.get_tiles().clone().as_ref(), pipe_data);
+                                        animate_double_move(&mut terminal, movements1, movements2, game_board.get_tiles().clone().as_ref(), other_board_ref.get_tiles().clone().as_ref(), pipe_data, action);
 
                                         // 存储本次
                                         last_game_board_status = game_board.get_tiles().clone();

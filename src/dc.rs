@@ -14,7 +14,7 @@ use tui::{
 };
 use std::{io, thread, time::Duration};
 
-use crate::game_board::{Position, TileMovement};
+use crate::game_board::{Direction, Position, TileMovement};
 
 const TILE_WIDTH: u16 = 6;  // 方块的宽度
 const TILE_HEIGHT: u16 = 3;  // 方块的高度
@@ -26,7 +26,8 @@ pub fn animate_double_move<B: Backend>(
     movements2: Vec<TileMovement>,
     board1: &Vec<Vec<u32>>,
     board2: &Vec<Vec<u32>>,
-    pipe_data: Vec<u32>,
+    mut pipe_data: Vec<u32>,
+    action: Direction
 ) -> Result<(), std::io::Error> {
     let size = terminal.size()?;
 
@@ -45,7 +46,8 @@ pub fn animate_double_move<B: Backend>(
     let pipe_area = Rect::new(start_x + board_width, size.y + 2 + tile_height * 2, pipe_width, tile_height);
     let board2_area = Rect::new(start_x + board_width + pipe_width, size.y + 2, board_width, tile_height * 4);
 
-    let num_steps = 12;
+    // 动画次数
+    let num_steps = 10;
 
     for step in 1..=num_steps {
         terminal.draw(|frame| {
@@ -85,8 +87,44 @@ pub fn animate_double_move<B: Backend>(
                 draw_tile(frame, *value, x, y, tile_width, tile_height);
             }
 
-            // 绘制管道
-            draw_pipe(frame, pipe_area, pipe_data.clone());
+            // 绘制管道底色
+            frame.render_widget(Block::default().borders(Borders::NONE).style(Style::default().bg(Color::Rgb(255, 0, 127))), pipe_area);
+
+            // 绘制管道中的滑动方块
+            for (i, &num) in pipe_data.iter().enumerate() {
+                let (start_x_abs, start_y_abs) = (pipe_area.x + i as u16 * (tile_width + gap), pipe_area.y + 2);
+                let (end_x_abs, end_y_abs) = match action {
+                    Direction::Left => {
+                        if i == 0 {
+                            (pipe_area.x + (pipe_tiles_count - 1) as u16 * (tile_width + gap), pipe_area.y + 2)
+                        } else {
+                            (pipe_area.x + (i - 1) as u16 * (tile_width + gap), pipe_area.y + 2)
+                        }
+                    }
+                    Direction::Right => {
+                        if i as u16 == pipe_tiles_count - 1 {
+                            (pipe_area.x, pipe_area.y + 2)
+                        } else {
+                            (pipe_area.x + (i + 1) as u16 * (tile_width + gap), pipe_area.y + 2)
+                        }
+                    }
+                    _ => (start_x_abs, start_y_abs),
+                };
+                let x = interpolate(start_x_abs, end_x_abs, step, num_steps);
+                let y = start_y_abs;
+
+                // 如果 num 不为 0，则绘制方块
+                if num != 0 {
+                    let tile_rect = Rect::new(x, y, tile_width, tile_height);
+                    let content = format!("\n{}\n", format_number(num));
+                    let para = Paragraph::new(content)
+                        .alignment(Alignment::Center)
+                        .block(Block::default().borders(Borders::NONE).style(Style::default().bg(get_bg_color(num))))
+                        .style(Style::default().fg(Color::White));
+
+                    frame.render_widget(para, tile_rect);
+                }
+            }
         })?;
 
         // 等待一段时间，形成动画效果
@@ -101,21 +139,24 @@ pub fn animate_double_move<B: Backend>(
     Ok(())  // 确保返回一个 Result
 }
 
+
+
+
 /// 绘制单个瓷砖
 fn draw_tile<B: Backend>(frame: &mut Frame<B>, tile_value: u32, x: u16, y: u16, tile_width: u16, tile_height: u16) {
     let tile_rect = Rect::new(x, y, tile_width, tile_height);
     let bg_color = get_bg_color(tile_value);
     let fg_color = if tile_value > 4 { Color::White } else { Color::Black };
     let number = if tile_value > 0 { format_number(tile_value) } else { String::new() };
-    let content = format!("\n\n{}\n\n\n", number);
+
+    let content = format!("\n{}\n", number); // 增加换行符以调整文本位置
     let para = Paragraph::new(content)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Center) // 确保文本在方块内居中对齐
         .block(Block::default().borders(Borders::NONE).style(Style::default().bg(bg_color)))
         .style(Style::default().fg(fg_color).bg(bg_color).add_modifier(Modifier::BOLD));
 
     frame.render_widget(para, tile_rect);
 }
-
 /// 计算瓷砖在屏幕上的绝对位置
 fn calculate_absolute_position(pos: Position, tile_width: u16, tile_height: u16, gap: u16, start_x: u16, start_y: u16) -> (u16, u16) {
     let x = start_x + pos.x as u16 * (tile_width + gap + 1);  // 注意这里的加1，以对齐静态绘制
@@ -182,6 +223,59 @@ pub fn draw_board<B: Backend>(frame: &mut Frame<B>, area: Rect, board: &Vec<Vec<
     }
 }
 
+/// 绘制管道动画
+pub fn animate_pipe<B: Backend>(
+    terminal: &mut Terminal<B>,
+    area: Rect,
+    data: Vec<u32>,
+    direction: Direction
+) -> Result<(), std::io::Error> {
+    let num_steps = 5;  // 动画的步骤数
+    let tile_width: u16 = TILE_WIDTH;
+    let tile_height: u16 = TILE_HEIGHT;
+    let pipe_color = Color::Rgb(255, 0, 127);  // 管道颜色
+    let gap: u16 = 1;
+
+    for step in 1..=num_steps {
+        terminal.draw(|frame| {
+            // 清除整个管道区域
+            frame.render_widget(Block::default().borders(Borders::NONE).style(Style::default().bg(Color::Black)), area);
+
+            // 绘制每个移动的方块动画
+            for (i, &num) in data.iter().enumerate() {
+                let (start_x_abs, start_y_abs) = (area.x + i as u16 * (tile_width + gap), area.y);
+                let (end_x_abs, end_y_abs) = match direction {
+                    Direction::Left => (start_x_abs.saturating_sub((tile_width + gap) as u16), start_y_abs),
+                    Direction::Right => (start_x_abs + (tile_width + gap) as u16, start_y_abs),
+                    _ => (start_x_abs, start_y_abs),
+                };
+                let x = interpolate(start_x_abs, end_x_abs, step, num_steps);
+                let y = start_y_abs;
+
+                let tile_rect = Rect::new(x, y + 2, tile_width, tile_height);  // 定义格子的位置和尺寸
+                let content = format!("\n{}\n", format_number(num));
+                let para = Paragraph::new(content)
+                    .alignment(Alignment::Center)
+                    .block(Block::default().borders(Borders::NONE).style(Style::default().bg(pipe_color)))
+                    .style(Style::default().fg(Color::White));
+
+                frame.render_widget(para, tile_rect);
+            }
+        })?;
+
+        // 等待一段时间，形成动画效果
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    // 动画结束后再次绘制静态的管道状态
+    terminal.draw(|frame| {
+        draw_pipe(frame, area, data);
+    })?;
+
+    Ok(())  // 确保返回一个 Result
+}
+
+/// 绘制管道
 pub fn draw_pipe<B: Backend>(frame: &mut Frame<B>, area: Rect, data: Vec<u32>) {
     let pipe_color = Color::Rgb(255, 0, 127);  // 管道颜色
 
@@ -206,7 +300,6 @@ pub fn draw_pipe<B: Backend>(frame: &mut Frame<B>, area: Rect, data: Vec<u32>) {
         frame.render_widget(para, tile_rect);  // 将段落渲染到对应的矩形区域
     }
 }
-
 
 fn format_number(num: u32) -> String {
     num.to_string().chars()
