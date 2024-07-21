@@ -25,7 +25,7 @@ pub fn draw_double_board<B: Backend>(frame: &mut Frame<B>, board1: &Vec<Vec<u32>
     let pipe_tiles_count = 5;  // 管道由五个格子组成
     let pipe_width = TILE_WIDTH * pipe_tiles_count;  // 管道的宽度为五个格子宽
 
-    let board_width = TILE_WIDTH * 4;  // 每个棋盘的总宽度
+    let board_width = TILE_WIDTH * 5;  // 每个棋盘的总宽度
     let total_width = board_width * 2 + pipe_width;  // 总宽度包括两个棋盘和一个管道
 
     let start_x = if size.width > total_width { (size.width - total_width) / 2 } else { 0 };
@@ -76,15 +76,14 @@ pub fn draw_pipe<B: Backend>(frame: &mut Frame<B>, area: Rect, data: &[u8]) {
         let y = area.y;  // 维持在第三行位置
         let tile_rect = Rect::new(x, y + 2, TILE_WIDTH, TILE_HEIGHT);  // 定义格子的位置和尺寸
 
-        // 格式化数字，确保垂直居中，加两行换行符作为上下填充
         let content = if i < data.len() {
-            format!("\n{}\n", format_number(data[i] as u32))  // 在数字前后添加换行符以实现垂直居中
+            format_number(data[i] as u32)  // 格式化存在的数据
         } else {
-            String::from("\n \n")  // 没有数据时显示空行，保持格子不显示乱码或旧数据
+            String::from(" ")  // 数据不存在则显示空格
         };
 
         let para = Paragraph::new(content)
-            .alignment(Alignment::Center)  // 水平居中
+            .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::NONE).style(Style::default().bg(pipe_color)))
             .style(Style::default().fg(Color::White));  // 设置文字和背景颜色
 
