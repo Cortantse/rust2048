@@ -61,6 +61,7 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
     // 本地创建双方棋盘实例，这里默认就是双人模式
     let mut game_board = GameBoard::new();
     let mut other_board = GameBoard::new();
+    let data = vec![0,0,0];
     let ref mut other_board_ref = other_board;
 
     // 自身在服务器等级的identity号
@@ -101,11 +102,12 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
                                 // 这里要根据不同的角色
                                 game_board.set_tiles(game_state.board1);
                                 other_board_ref.set_tiles(game_state.board2);
+                    
                                 // 展示棋盘
                                 // 暂时未none，animated_vector实际不为none！！！！！！！
                                 // game_board.print_state_with(&other_board_ref, game_state.animated_vector);
                                 terminal.draw(|f| {
-                                    draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles());
+                                    draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles(), &data);
                                 })?;
                             },
                             _ => {
@@ -155,7 +157,7 @@ async fn main()  -> Result<(), Box<dyn std::error::Error>>  {
                                             // game_board.print_state_with(other_board_ref, game_state.animated_vector);
                                             
                                             terminal.draw(|f| {
-                                                draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles());
+                                                draw_double_board(f, game_board.get_tiles(), other_board_ref.get_tiles(), &data);
                                             })?;
                                         },
                                         _ => {
