@@ -127,7 +127,7 @@ impl GameBoard {
             Direction::Down => self.move_down(false),
             Direction::Left => self.move_left(false),
             Direction::Right => self.move_right(false),
-            _ => panic!("Should not go to move_tiles function with None direction"),
+            _ => return,
         }
         // // 内置检查，理论上移动前后不会有数据差别
         // let score = self.return_score();
@@ -439,7 +439,7 @@ impl GameBoard {
     }
 
     // 使用时注意这不包含管道的逻辑
-    pub fn get_tile_movements(&mut self, mut updated_chb_status: Vec<Vec<u32>>, action: Direction, other_movement_from_pipe: Vec<TileMovement>) -> Vec<TileMovement> {
+    pub fn get_tile_movements(&mut self, mut last_chb: Vec<Vec<u32>>, mut updated_chb_status: Vec<Vec<u32>>, action: Direction, other_movement_from_pipe: Vec<TileMovement>) -> Vec<TileMovement> {
         let mut movements = other_movement_from_pipe.clone();  // 包含来自管道的其它动画移动
 
         // 根据 updated_chb_status 获得 ori_chb_status, 采取反转动作不合并来获得
@@ -529,7 +529,109 @@ impl GameBoard {
             _ => {}
         }
 
+        let static_tiles = self.get_static_tiles(last_chb, action);
+        for movement in movements.iter_mut() {
+            if static_tiles.contains(&movement.end_pos) {
+                movement.start_pos = movement.end_pos;
+            }
+        }
+
         movements
+    }
+
+    fn get_static_tiles(&self, mut ori_chb_status: Vec<Vec<u32>>, action: Direction) -> Vec<Position> {
+        let mut static_movement = Vec::new();
+        let size = ori_chb_status.len();
+
+        match action {
+            Direction::Up => {
+                for x in 0..size {
+                    if ori_chb_status[0][x] != 0{
+                        static_movement.push(Position { x, y: 0 }); // 最顶端的方块
+                    }
+                    for y in 1..size {
+                        if ori_chb_status[y][x] != 0 {
+                            let mut can_move = false;
+                            for ny in 0..y {
+                                if ori_chb_status[ny][x] == 0 {
+                                    can_move = true;
+                                    break;
+                                }
+                            }
+                            if !can_move{
+                                static_movement.push(Position { x, y });
+                            }
+                        }
+                    }
+                }
+            },
+            Direction::Down => {
+                for x in 0..size {
+                    if ori_chb_status[size - 1][x] != 0{
+                        static_movement.push(Position { x, y: size - 1 }); // 最底端的方块
+                    }
+                    for y in (0..size-1).rev() {
+                        if ori_chb_status[y][x] != 0 {
+                            let mut can_move = false;
+                            for ny in (y+1)..size {
+                                if ori_chb_status[ny][x] == 0 {
+                                    can_move = true;
+                                    break;
+                                }
+                            }
+                            if !can_move {
+                                static_movement.push(Position { x, y });
+                            }
+                        }
+                    }
+                }
+            },
+            Direction::Left => {
+                for y in 0..size {
+                    if ori_chb_status[y][0] != 0{
+                        static_movement.push(Position { x: 0, y }); // 最左端的方块
+                    }
+                    for x in 1..size {
+                        if ori_chb_status[y][x] != 0 {
+                            let mut can_move = false;
+                            for nx in 0..x {
+                                if ori_chb_status[y][nx] == 0 {
+                                    can_move = true;
+                                    break;
+                                }
+                            }
+                            if !can_move {
+                                static_movement.push(Position { x, y });
+                            }
+                        }
+                    }
+                }
+            },
+            Direction::Right => {
+                for y in 0..size {
+                    if ori_chb_status[y][size - 1] != 0{
+                        static_movement.push(Position { x: size - 1, y }); // 最右端的方块
+                    }
+                    for x in (0..size-1).rev() {
+                        if ori_chb_status[y][x] != 0 {
+                            let mut can_move = false;
+                            for nx in (x+1)..size {
+                                if ori_chb_status[y][nx] == 0 {
+                                    can_move = true;
+                                    break;
+                                }
+                            }
+                            if !can_move {
+                                static_movement.push(Position { x, y });
+                            }
+                        }
+                    }
+                }
+            },
+            _ => {}
+        }
+
+        static_movement
     }
 
 }
@@ -542,6 +644,27 @@ impl GameBoard {
 #[cfg(test)]
 mod tests_base {
     use super::*;
+
+    #[test]
+    fn test_static() {
+        let ori_chb_status = vec![
+        vec![2, 2, 0, 0],
+        vec![0, 0, 0, 0],
+        vec![0, 8, 0, 0],
+        vec![8, 2, 8, 4],
+        ];
+
+        let directions = vec![Direction::Up, Direction::Down, Direction::Left, Direction::Right];
+
+        let tem = GameBoard::new();
+
+        for direction in directions {
+            let static_tiles = tem.get_static_tiles(ori_chb_status.clone(), direction);
+            println!("Static tiles for direction {:?}: {:?}", direction, static_tiles);
+        }
+    }
+
+
     #[test]
     fn test_reset_board() {
         let mut game = GameBoard::new();

@@ -15,12 +15,10 @@ use tui::{
 mod bridge;
 mod game;
 mod game_board;
-mod game_controller;
 mod io_manager;
 
 pub use crate::bridge::Bridge;
 pub use crate::game_board::GameBoard;
-pub use crate::game_controller::GameController;
 pub use crate::io_manager::IOManager;
 use game_board::{Direction, TileMovement, Position};
 
@@ -118,23 +116,6 @@ fn get_bg_color(n: u32) -> Color {
     }
 }
 
-/// 绘制单个瓷砖
-fn draw_tile<B: Backend>(frame: &mut Frame<B>, tile_value: u32, x: u16, y: u16, tile_width: u16, tile_height: u16) {
-    let tile_rect = Rect::new(x, y, tile_width, tile_height);
-    let bg_color = get_bg_color(tile_value);
-    let fg_color = if tile_value > 4 { Color::White } else { Color::Black };
-    let number = format_number(tile_value);
-    let content = format!("\n\n{}\n\n\n", number);
-    let para = Paragraph::new(content)
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::NONE).style(Style::default().bg(bg_color)))
-        .style(Style::default().fg(fg_color).bg(bg_color).add_modifier(Modifier::BOLD));
-
-    frame.render_widget(para, tile_rect);
-}
-
-
-
 
 
 /// 执行瓷砖的动画移动
@@ -143,21 +124,30 @@ fn animate_move<B: Backend>(
     movements: Vec<TileMovement>,
     game_board: &GameBoard
 ) -> Result<(), std::io::Error> {
-    let size = terminal.size();
+    let size = terminal.size()?;
 
     let tile_width: u16 = 13;
     let tile_height: u16 = 5;
     let gap: u16 = 1;
 
-    let start_x = (size.as_ref().unwrap().width.saturating_sub(tile_width * 4 + (gap * 3))) / 2;
-    let start_y = (size.as_ref().unwrap().height.saturating_sub(tile_height * 4 + (gap * 3))) / 2;
+    let start_x = (size.width.saturating_sub(tile_width * 4 + (gap * 3))) / 2;
+    let start_y = (size.height.saturating_sub(tile_height * 4 + (gap * 3))) / 2;
 
     let num_steps = 5;  // 动画的步骤数
 
     for step in 1..=num_steps {
-        // 清除整个屏幕
         terminal.draw(|frame| {
+            // 清除整个屏幕
             frame.render_widget(Block::default().borders(Borders::NONE).style(Style::default().bg(Color::Black)), frame.size());
+
+            // 先绘制背景的所有方块，值为0
+            for i in 0..4 {
+                for j in 0..4 {
+                    let x = start_x + j as u16 * (tile_width + gap + 1);
+                    let y = start_y + i as u16 * (tile_height + gap);
+                    draw_tile(frame, 0, x, y, tile_width, tile_height);
+                }
+            }
 
             // 绘制每个移动的瓷砖动画
             for movement in &movements {
@@ -180,6 +170,21 @@ fn animate_move<B: Backend>(
     })?;
 
     Ok(())  // 确保返回一个 Result
+}
+
+/// 绘制单个瓷砖
+fn draw_tile<B: Backend>(frame: &mut Frame<B>, tile_value: u32, x: u16, y: u16, tile_width: u16, tile_height: u16) {
+    let tile_rect = Rect::new(x, y, tile_width, tile_height);
+    let bg_color = get_bg_color(tile_value);
+    let fg_color = if tile_value > 4 { Color::White } else { Color::Black };
+    let number = if tile_value > 0 { format_number(tile_value) } else { String::new() };
+    let content = format!("\n\n{}\n\n\n", number);
+    let para = Paragraph::new(content)
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::NONE).style(Style::default().bg(bg_color)))
+        .style(Style::default().fg(fg_color).bg(bg_color).add_modifier(Modifier::BOLD));
+
+    frame.render_widget(para, tile_rect);
 }
 
 /// 计算瓷砖在屏幕上的绝对位置
@@ -233,10 +238,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => {
                     // 非None 才管
                     // io_manager.clear_screen();
+                    let ori = game_board.get_tiles().clone();
                     game_board.move_tiles(action);
 
                     //测试
-                    let movements = game_board.get_tile_movements(game_board.get_tiles().clone(), action, vec![]);
+                    let movements = game_board.get_tile_movements(ori, game_board.get_tiles().clone(), action, vec![]);
                     // 在绘制函数内部调用动画函数
                     animate_move(&mut terminal, movements, &game_board)?;
 

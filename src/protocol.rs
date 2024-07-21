@@ -14,6 +14,8 @@ pub struct GameState {
     pub board1_reach_2048: bool,
     pub board2_reach_2048: bool,
     pub animated_vector: Option<Vec<u32>>,
+    pub action1: Direction,
+    pub action2: Direction,
 }
 
 // 玩家的操作，将内部Direction封装
@@ -113,7 +115,7 @@ pub async fn receive_message_with_buffer(
     if n == 0 {
         // 如果没有更多数据可读，检查缓冲区是否空，如果是则报错
         if buffer.is_empty() {
-            eprintln!("No data read; stream might be closed.");
+            // eprintln!("No data read; stream might be closed.");
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "Connection was closed by the server",

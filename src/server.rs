@@ -12,7 +12,6 @@ use tokio::select;
 mod bridge;
 mod config;
 mod game_board;
-mod game_controller;
 mod io_manager;
 mod protocol;
 
@@ -21,7 +20,6 @@ use protocol::{deserialize_message, serialize_message, prevent_sticky_message};
 
 pub use crate::bridge::Bridge;
 pub use crate::game_board::GameBoard;
-pub use crate::game_controller::GameController;
 pub use crate::io_manager::IOManager;
 
 // 服务器函数采用 1+1+k体系
@@ -98,6 +96,8 @@ async fn send_board_status(game_board1: Arc<Mutex<GameBoard>>, game_board2: Arc<
         board1_reach_2048: game_board1_unlocked.check_game_over(),
         board2_reach_2048: game_board2_unlocked.check_game_over(),
         animated_vector: animated_vector,
+        action1: Direction::None,
+        action2: Direction::None,
     };
 
     println!("already get the lock");
@@ -120,7 +120,7 @@ async fn send_board_status(game_board1: Arc<Mutex<GameBoard>>, game_board2: Arc<
 }
 
 
-async fn send_board_status_safe(game_board1: Arc<Mutex<GameBoard>>, game_board2: Arc<Mutex<GameBoard>>, mut socket1: Arc<Mutex<TcpStream>>, mut socket2: Arc<Mutex<TcpStream>>, animated_vector: Option<Vec<u32>>) {
+async fn send_board_status_safe(game_board1: Arc<Mutex<GameBoard>>, game_board2: Arc<Mutex<GameBoard>>, mut socket1: Arc<Mutex<TcpStream>>, mut socket2: Arc<Mutex<TcpStream>>, animated_vector: Option<Vec<u32>>, action: Direction, if_player2: bool) {
     println!("Into sending board_status");
     // 序列化双方棋盘状态，传递给客户端，使用定制协议
 
@@ -136,6 +136,8 @@ async fn send_board_status_safe(game_board1: Arc<Mutex<GameBoard>>, game_board2:
         board1_reach_2048: game_board1_unlocked.check_game_over(),
         board2_reach_2048: game_board2_unlocked.check_game_over(),
         animated_vector: animated_vector,
+        action1: if !if_player2 { action } else { Direction::None },
+        action2: if if_player2 { action } else { Direction::None },
     };
 
     println!("already get the lock");
@@ -230,11 +232,11 @@ async fn execute_action_and_update_to_clients(socket1: Arc<Mutex<TcpStream>>, so
 
                     // 更新双方情况，接受一个参数来判断是谁
                     if !if_player2 {
-                        send_board_status_safe(game_board1.clone(), game_board2.clone(), socket1, socket2, animated_vector).await;
+                        send_board_status_safe(game_board1.clone(), game_board2.clone(), socket1, socket2, animated_vector, action.direction, if_player2).await;
                     }
                     else {
                         // 反转，保持gameboard1还是player1，方便客户端区分
-                        send_board_status_safe(game_board2.clone(), game_board1.clone(), socket2, socket1, animated_vector).await;
+                        send_board_status_safe(game_board2.clone(), game_board1.clone(), socket2, socket1, animated_vector, action.direction, if_player2).await;
                     }
                 }
                 Ok(_) => eprintln!("Unexpected message type"), // 接收到非预期类型的消息
