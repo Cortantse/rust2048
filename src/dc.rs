@@ -45,7 +45,7 @@ pub fn animate_double_move<B: Backend>(
     let pipe_area = Rect::new(start_x + board_width, size.y + 2 + tile_height * 2, pipe_width, tile_height);
     let board2_area = Rect::new(start_x + board_width + pipe_width, size.y + 2, board_width, tile_height * 4);
 
-    let num_steps = 5;
+    let num_steps = 12;
 
     for step in 1..=num_steps {
         terminal.draw(|frame| {
